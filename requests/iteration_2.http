@@ -1,0 +1,234 @@
+### Авторизация Админом
+POST /api/v1/auth/login HTTP/1.1
+Host: localhost:4111
+Content-Type: application/json
+{
+  "username": "admin",
+  "password": "admin"
+}
+###Создание нового пользователя Админом
+POST /api/v1/admin/users HTTP/1.1
+Host: localhost:4111
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+{
+  "username": "albina1994",
+  "password": "verysTRongPassword33$",
+  "role": "USER"
+}
+###Авторизация новым пользователем
+POST /api/v1/auth/login HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+{
+  "username": "albina1994",
+  "password": "verysTRongPassword33$"
+}
+### Создание счета id=1
+POST /api/v1/accounts HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+### Создание второго счета id=2
+POST /api/v1/accounts HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+### Позитивный кейс: Внесение денег на счет граничной максимальной суммы 4999
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+{
+  "id": 1,
+  "balance": 4999
+}
+### Позитивный кейс: Внесение денег на счет максимальной суммы 5000
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+{
+  "id": 1,
+  "balance": 5000
+}
+### Негативный кейс: Внесение денег на счет, сумма больше максимальной 5001
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+{
+"id": 1,
+"balance": 5000
+}
+### Негативный кейс: Внесение денег на счет, отрицательная сумма -1
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+{
+"id": 1,
+"balance": -1
+}
+### Негативный кейс: Внесение денег на счет, отрицательная сумма 0
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+
+
+{
+  "id": 1,
+  "balance": 0
+}
+### Позитивный кейс: Внесение денег на счет граничной суммы 1
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 29
+
+{
+  "id": 1,
+  "balance": 1
+}
+###Позитивный кейс: Перевод с одного счета на другой 10000
+POST /api/v1/accounts/transfer HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 71
+
+{
+  "senderAccountId": 1,
+  "receiverAccountId": 2,
+  "amount": 10000
+}
+### Перевод отрицаительной суммы -1
+### Перевод 0
+### Негативный кейс: Перевод суммы больше допустимой суммы
+POST /api/v1/accounts/transfer HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 71
+
+{
+  "senderAccountId": 1,
+  "receiverAccountId": 2,
+  "amount": 10001
+}
+### Позитивный кейс: Внесение денег на счет максимальной суммы 5000 (подготовка данных)
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+{
+  "id": 1,
+  "balance": 5000
+}
+
+### Негативный кейс: Перевод суммы больше чем есть на счету
+POST /api/v1/accounts/transfer HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 71
+
+{
+  "senderAccountId": 1,
+  "receiverAccountId": 2,
+  "amount": 9999
+}
+### Негативный кейс: Перевод на не существующий счет
+POST /api/v1/accounts/transfer HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=2D4B2183DD621A55C91E2A4EABCDBB88
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 68
+
+{
+  "senderAccountId": 1,
+  "receiverAccountId": 7,
+  "amount": 50
+}
+### Негативный кейс: Внесение денег на несуществующий счет
+POST /api/v1/accounts/deposit HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=BAD12D5439211AA7CFB1A057AC1D0D38
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 31
+
+{
+  "id": 5,
+  "balance": 100
+}
+###Негативный кейс:Изменение имени пользователя (одно слово)
+PUT /api/v1/customer/profile HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=2D4B2183DD621A55C91E2A4EABCDBB88
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 22
+
+{
+  "name": "Johооо"
+}
+###Негативный кейс:Изменение имени пользователя (два слова разделенные пробелом с символом
+PUT /api/v1/customer/profile HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=2D4B2183DD621A55C91E2A4EABCDBB88
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 26
+
+{
+  "name": "ajak sksk("
+}
+###Негативный кейс:Изменение имени пользователя (два слова разделенные пробелом с цифрой)
+PUT /api/v1/customer/profile HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=2D4B2183DD621A55C91E2A4EABCDBB88
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 26
+
+{
+  "name": "ajak sksk1"
+}
+###Негативный кейс:Изменение имени пользователя (два слова разделенные  несколькими пробелами)
+PUT /api/v1/customer/profile HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=2D4B2183DD621A55C91E2A4EABCDBB88
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 29
+
+{
+  "name": "ajak     sksk"
+}
+### Позитивный кейс: Изменение имени пользователя (два слова разделенные пробелом)
+PUT /api/v1/customer/profile HTTP/1.1
+Host: localhost:4111
+Cookie: JSESSIONID=2D4B2183DD621A55C91E2A4EABCDBB88
+Content-Type: application/json
+Authorization: Basic YWxiaW5hMTk5NDp2ZXJ5c1RSb25nUGFzc3dvcmQzMyQ=
+Content-Length: 25
+
+{
+  "name": "ajak sksk"
+}
