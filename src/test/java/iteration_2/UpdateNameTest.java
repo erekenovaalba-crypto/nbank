@@ -29,7 +29,7 @@ class UpdateNameTest {
 
     public static Stream<Arguments> userValidDataForUpdateName(){
         return Stream.of(
-                //Негативный кейс:Изменение имени пользователя (одно слово)
+
                 Arguments.of("Albina Abzhetova"),
                 Arguments.of("albina abzhetova")
 
@@ -58,6 +58,43 @@ class UpdateNameTest {
                 .statusCode(HttpStatus.SC_OK)
                 .body("customer.name", Matchers.equalTo(name))
                 .body("message", Matchers.equalTo("Profile updated successfully"));;
+    }
+    //негативные кейсы
+    public static Stream<Arguments> userInvalidDataForUpdateName(){
+        return Stream.of(
+                // Негативный кейс:Изменение имени пользователя (одно слово)
+                Arguments.of("Johооо"),
+                //Негативный кейс:Изменение имени пользователя (два слова разделенные пробелом с символом
+                Arguments.of("ajak sksk("),
+                //Негативный кейс:Изменение имени пользователя (два слова разделенные пробелом с цифрой)
+                Arguments.of("ajak sksk1"),
+                //Негативный кейс:Изменение имени пользователя (два слова разделенные  несколькими пробелами)
+                Arguments.of("ajak     sksk")
+
+        );
+    }
+    @MethodSource("userInvalidDataForUpdateName")
+    @ParameterizedTest
+    public void userUpdateNameWithIncorrectData(String name) {
+
+        String requestBody = String.format(
+                """
+                       {
+                          "name": "%s"
+                        }
+                        """, name
+        );
+
+        given()
+                .contentType(ContentType.JSON)
+                .accept(ContentType.JSON)
+                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
+                .body(requestBody)
+                .put(URL +"api/v1/customer/profile")
+                .then()
+                .assertThat()
+                .statusCode(HttpStatus.SC_BAD_REQUEST)
+                .body( Matchers.equalTo("Name must contain two words with letters only"));
     }
 }
 
