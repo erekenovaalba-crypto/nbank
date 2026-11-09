@@ -68,7 +68,7 @@ public class LoginUserTest {
                 .accept(ContentType.JSON)
                 .body("""
                         {
-                          "username": "albina1994",
+                          "username": "albina490",
                           "password": "verysTRongPassword33$"
                         }
                         """)

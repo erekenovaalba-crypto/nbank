@@ -57,9 +57,18 @@ class UpdateNameTest {
                 .assertThat()
                 .statusCode(HttpStatus.SC_OK)
                 .body("customer.name", Matchers.equalTo(name))
-                .body("message", Matchers.equalTo("Profile updated successfully"));;
+                .body("message", Matchers.equalTo("Profile updated successfully"));
+
+        given()
+                .accept(ContentType.JSON)
+                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
+                .get(URL + "api/v1/customer/profile")
+                .then()
+                .assertThat()
+                .statusCode(HttpStatus.SC_OK)
+                .body("name", Matchers.equalTo(name));
     }
-    //негативные кейсы
+        //негативные кейсы
     public static Stream<Arguments> userInvalidDataForUpdateName(){
         return Stream.of(
                 // Негативный кейс:Изменение имени пользователя (одно слово)
@@ -95,6 +104,15 @@ class UpdateNameTest {
                 .assertThat()
                 .statusCode(HttpStatus.SC_BAD_REQUEST)
                 .body( Matchers.equalTo("Name must contain two words with letters only"));
+        given()
+                .contentType(ContentType.JSON)
+                .accept(ContentType.JSON)
+                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
+                .body(requestBody)
+                .get(URL +"api/v1/customer/profile")
+                .then()
+                .assertThat()
+                .body( Matchers.not(Matchers.equalTo(name)));
     }
 }
 
