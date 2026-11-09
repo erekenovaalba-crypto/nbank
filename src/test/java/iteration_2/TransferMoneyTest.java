@@ -85,7 +85,7 @@ public class TransferMoneyTest {
                 .body(Matchers.equalTo(responseError));
         List<TransactionData> transactionsAfter = getTransactions(senderId);
         assertEquals(countBefore, transactionsAfter.size(),
-                "Количество транзакций изменилось после неудачного депозита: " + transactionsAfter);
+                "Количество транзакций изменилось после перевода: " + transactionsAfter);
 
     }
     public static Stream<Arguments> userValidData(){

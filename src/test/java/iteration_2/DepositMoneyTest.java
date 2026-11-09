@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DepositMoneyTest {
     private static final String URL = "http://localhost:4111/";
@@ -145,9 +146,9 @@ public class DepositMoneyTest {
         assertAll("Последняя транзакция",
                 () -> assertEquals(last.getId(), last1.getId()),
                 () -> assertEquals(last.getType(), last1.getType()),
-                () -> assertEquals(last.getAmount(), last1.getAmount()),
+                () -> assertEquals(0, last.getAmount().compareTo(balance)),
                 () -> assertEquals(last.getRelatedAccountId(), last1.getRelatedAccountId()),
-                () -> assertNotNull(last.getTimestamp(), last1.getTimestamp())
+                () -> assertEquals(last.getTimestamp(), last1.getTimestamp())
         );
 
 

@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 
 import static io.restassured.RestAssured.given;
 
-@Nested
+
 class UpdateNameTest {
     private static final String URL = "http://localhost:4111/";
     @BeforeAll
@@ -112,7 +112,7 @@ class UpdateNameTest {
                 .get(URL +"api/v1/customer/profile")
                 .then()
                 .assertThat()
-                .body( Matchers.not(Matchers.equalTo(name)));
+                .body("name", Matchers.not(Matchers.equalTo(name)));
     }
 }
 
