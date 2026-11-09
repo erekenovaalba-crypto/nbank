@@ -1,4 +1,4 @@
-package iteration_2;
+package models;
 
 import java.math.BigDecimal;
 
