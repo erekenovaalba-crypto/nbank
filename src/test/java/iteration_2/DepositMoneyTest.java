@@ -28,17 +28,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class DepositMoneyTest extends BaseTest {
 
-    private record TestUser(RequestSpecification spec, long accountId) {}
-
-    private TestUser user;
+    private RequestSpecification userSpec;
+    private long accountId;
 
     // у каждого теста свой новый пользователь и свой пустой счёт
     @BeforeEach
     public void setupUser() {
-        user = createUserWithAccount();
+        userSpec = createUser();
+        accountId = createAccount(userSpec);
     }
 
-    private static TestUser createUserWithAccount() {
+    // создаёт пользователя через админа и возвращает спецификацию для запросов от его имени
+    private RequestSpecification createUser() {
         CreateUserRequest userRequest = CreateUserRequest.builder()
                 .username(RandomData.getUsername())
                 .password(RandomData.getPassword())
@@ -50,20 +51,20 @@ public class DepositMoneyTest extends BaseTest {
                 ResponseSpecs.entityWasCreated())
                 .post(userRequest);
 
-        RequestSpecification spec = RequestSpecs.authAsUser(
-                userRequest.getUsername(), userRequest.getPassword());
+        return RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword());
+    }
 
-        long accountId = new CreateAccountRequester(spec, ResponseSpecs.entityWasCreated())
+    // создаёт счёт пользователю и возвращает его id
+    private long createAccount(RequestSpecification spec) {
+        return new CreateAccountRequester(spec, ResponseSpecs.entityWasCreated())
                 .post(null)
                 .extract().as(CreateAccountResponse.class)
                 .getId();
-
-        return new TestUser(spec, accountId);
     }
 
-    private List<TransactionData> getTransactions(RequestSpecification spec, long accountId) {
+    private List<TransactionData> getTransactions(RequestSpecification spec, long id) {
         return new AccountTransactionsRequester(spec, ResponseSpecs.requestResponseOK())
-                .get(accountId)
+                .get(id)
                 .extract().jsonPath()
                 .getList("", TransactionData.class);
     }
@@ -80,12 +81,12 @@ public class DepositMoneyTest extends BaseTest {
     @ParameterizedTest
     public void userCanDepositMoneyIntoOwnAccount(BigDecimal amount) {
         CreateAccountResponse response = new DepositRequester(
-                user.spec(),
+                userSpec,
                 ResponseSpecs.requestResponseOK())
-                .post(DepositRequest.builder().id(user.accountId()).balance(amount).build())
+                .post(DepositRequest.builder().id(accountId).balance(amount).build())
                 .extract().as(CreateAccountResponse.class);
 
-        softly.assertThat(response.getId()).isEqualTo(user.accountId());
+        softly.assertThat(response.getId()).isEqualTo(accountId);
         softly.assertThat(response.getBalance()).as("Баланс в ответе депозита").isEqualByComparingTo(amount);
 
         // счёт новый, значит транзакция должна быть ровно одна
@@ -95,11 +96,11 @@ public class DepositMoneyTest extends BaseTest {
         softly.assertThat(deposit.getId()).isNotNull().isPositive();
         softly.assertThat(deposit.getType()).isEqualTo("DEPOSIT");
         softly.assertThat(deposit.getAmount()).isEqualByComparingTo(amount);
-        softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) user.accountId());
+        softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) accountId);
         softly.assertThat(deposit.getTimestamp()).isNotNull();
 
         // то же самое должно быть в истории транзакций счёта
-        List<TransactionData> stored = getTransactions(user.spec(), user.accountId());
+        List<TransactionData> stored = getTransactions(userSpec, accountId);
         assertThat(stored).hasSize(1);
         softly.assertThat(stored.get(0))
                 .usingRecursiveComparison()
@@ -119,11 +120,11 @@ public class DepositMoneyTest extends BaseTest {
     @ParameterizedTest
     public void userCannotDepositInvalidAmount(BigDecimal amount, String errorMessage) {
         new DepositRequester(
-                user.spec(),
+                userSpec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage))
-                .post(DepositRequest.builder().id(user.accountId()).balance(amount).build());
+                .post(DepositRequest.builder().id(accountId).balance(amount).build());
 
-        softly.assertThat(getTransactions(user.spec(), user.accountId()))
+        softly.assertThat(getTransactions(userSpec, accountId))
                 .as("После неудачного депозита транзакций быть не должно")
                 .isEmpty();
     }
@@ -131,23 +132,24 @@ public class DepositMoneyTest extends BaseTest {
     // Негативный кейс: депозит на чужой счёт
     @Test
     public void userCannotDepositIntoForeignAccount() {
-        TestUser owner = createUserWithAccount();
+        RequestSpecification ownerSpec = createUser();
+        long ownerAccountId = createAccount(ownerSpec);
 
         new DepositRequester(
-                user.spec(),
+                userSpec,
                 ResponseSpecs.requestResponseForbidden("Unauthorized access to account"))
                 .post(DepositRequest.builder()
-                        .id(owner.accountId())
+                        .id(ownerAccountId)
                         .balance(new BigDecimal("100.00"))
                         .build());
 
         // историю чужого счёта тоже читать нельзя
         new AccountTransactionsRequester(
-                user.spec(),
+                userSpec,
                 ResponseSpecs.requestResponseForbidden("You do not have permission to access this account"))
-                .get(owner.accountId());
+                .get(ownerAccountId);
 
-        // а у владельца счёта ничего не изменилось
-        softly.assertThat(getTransactions(owner.spec(), owner.accountId())).isEmpty();
+        //  у владельца счёта ничего не изменилось
+        softly.assertThat(getTransactions(ownerSpec, ownerAccountId)).isEmpty();
     }
 }
