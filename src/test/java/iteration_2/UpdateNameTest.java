@@ -1,64 +1,95 @@
 package iteration_2;
 
-import io.restassured.RestAssured;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
-import org.apache.http.HttpStatus;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Nested;
+import generators.NameGenerator;
+import generators.RandomData;
+import io.restassured.specification.RequestSpecification;
+import iteration_1.BaseTest;
+import models.*;
+import models.SuccessMessages;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import requests.AdminCreateUserRequester;
+import requests.GetProfileRequester;
+import requests.UpdateProfileRequester;
+import spec.RequestSpecs;
+import spec.ResponseSpecs;
 
-import java.util.List;
 import java.util.stream.Stream;
 
-import static io.restassured.RestAssured.given;
+public class UpdateNameTest extends BaseTest {
 
-@Nested
-class UpdateNameTest {
-    private static final String URL = "http://localhost:4111/";
-    @BeforeAll
-    public static void setupRestAssured() {
-        RestAssured.filters(
-                List.of(new RequestLoggingFilter(),
-                        new ResponseLoggingFilter()));
+    private RequestSpecification spec;
+
+    // у каждого теста свой новый пользователь
+    @BeforeEach
+    public void setupUser() {
+        CreateUserRequest userRequest = CreateUserRequest.builder()
+                .username(RandomData.getUsername())
+                .password(RandomData.getPassword())
+                .role(UserRole.USER.toString())
+                .build();
+
+        new AdminCreateUserRequester(
+                RequestSpecs.adminSpec(),
+                ResponseSpecs.entityWasCreated())
+                .post(userRequest);
+
+        spec = RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword());
     }
 
-    public static Stream<Arguments> userValidDataForUpdateName(){
+    private String getProfileName() {
+        return new GetProfileRequester(spec, ResponseSpecs.requestResponseOK())
+                .get()
+                .extract().as(CustomerProfile.class)
+                .getName();
+    }
+
+    // Позитивный кейс: два слова из букв, с заглавными и строчными буквами
+    public static Stream<Arguments> validNames() {
         return Stream.of(
-                //Негативный кейс:Изменение имени пользователя (одно слово)
-                Arguments.of("Albina Abzhetova"),
-                Arguments.of("albina abzhetova")
-
-        );
+                Arguments.of(NameGenerator.validName()),
+                Arguments.of(NameGenerator.validNameLowerCase()));
     }
-    @MethodSource("userValidDataForUpdateName")
+
+    @MethodSource("validNames")
     @ParameterizedTest
-    public void userUpdateNameWithCorrectData(String name) {
+    public void userCanUpdateNameWithValidData(String name) {
+        UpdateProfileResponse response = new UpdateProfileRequester(
+                spec,
+                ResponseSpecs.requestResponseOK())
+                .put(UpdateProfileRequest.builder().name(name).build())
+                .extract().as(UpdateProfileResponse.class);
 
-        String requestBody = String.format(
-                """
-                       {
-                          "name": "%s"
-                        }
-                        """, name
-        );
+        softly.assertThat(response.getMessage()).isEqualTo(SuccessMessages.PROFILE_UPDATED);
+        softly.assertThat(response.getCustomer().getName()).isEqualTo(name);
 
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
-                .body(requestBody)
-                .put(URL +"api/v1/customer/profile")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_OK)
-                .body("customer.name", Matchers.equalTo(name))
-                .body("message", Matchers.equalTo("Profile updated successfully"));;
+        // имя действительно сохранилось в профиле
+        softly.assertThat(getProfileName()).isEqualTo(name);
+    }
+
+    // Негативный кейс
+    public static Stream<Arguments> invalidNames() {
+        return Stream.of(
+                Arguments.of(NameGenerator.singleWordName()),
+                Arguments.of(NameGenerator.nameWithSymbol()),
+                Arguments.of(NameGenerator.nameWithDigit()),
+                Arguments.of(NameGenerator.nameWithExtraSpaces()));
+    }
+
+    @MethodSource("invalidNames")
+    @ParameterizedTest
+    public void userCannotUpdateNameWithInvalidData(String name) {
+        String nameBefore = getProfileName();
+
+        new UpdateProfileRequester(
+                spec,
+                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessages.INVALID_NAME))
+                .put(UpdateProfileRequest.builder().name(name).build());
+
+        softly.assertThat(getProfileName())
+                .as("Имя в профиле не должно измениться")
+                .isEqualTo(nameBefore);
     }
 }
-
-
