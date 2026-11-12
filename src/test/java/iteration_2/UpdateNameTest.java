@@ -1,13 +1,11 @@
 package iteration_2;
 
+import generators.NameGenerator;
 import generators.RandomData;
 import io.restassured.specification.RequestSpecification;
 import iteration_1.BaseTest;
-import models.CreateUserRequest;
-import models.CustomerProfile;
-import models.UpdateProfileRequest;
-import models.UpdateProfileResponse;
-import models.UserRole;
+import models.*;
+import models.SuccessMessages;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -48,11 +46,11 @@ public class UpdateNameTest extends BaseTest {
                 .getName();
     }
 
-    // Позитивный кейс: два слова из букв, в любом регистре
+    // Позитивный кейс: два слова из букв, с заглавными и строчными буквами
     public static Stream<Arguments> validNames() {
         return Stream.of(
-                Arguments.of("Albina Abzhetova"),
-                Arguments.of("albina abzhetova"));
+                Arguments.of(NameGenerator.validName()),
+                Arguments.of(NameGenerator.validNameLowerCase()));
     }
 
     @MethodSource("validNames")
@@ -64,24 +62,20 @@ public class UpdateNameTest extends BaseTest {
                 .put(UpdateProfileRequest.builder().name(name).build())
                 .extract().as(UpdateProfileResponse.class);
 
-        softly.assertThat(response.getMessage()).isEqualTo("Profile updated successfully");
+        softly.assertThat(response.getMessage()).isEqualTo(SuccessMessages.PROFILE_UPDATED);
         softly.assertThat(response.getCustomer().getName()).isEqualTo(name);
 
         // имя действительно сохранилось в профиле
         softly.assertThat(getProfileName()).isEqualTo(name);
     }
 
-    // Негативный кейс: имя должно состоять из двух слов, только из букв
+    // Негативный кейс
     public static Stream<Arguments> invalidNames() {
         return Stream.of(
-                // одно слово
-                Arguments.of("John"),
-                // два слова, во втором символ
-                Arguments.of("ajak sksk("),
-                // два слова, во втором цифра
-                Arguments.of("ajak sksk1"),
-                // два слова через несколько пробелов
-                Arguments.of("ajak     sksk"));
+                Arguments.of(NameGenerator.singleWordName()),
+                Arguments.of(NameGenerator.nameWithSymbol()),
+                Arguments.of(NameGenerator.nameWithDigit()),
+                Arguments.of(NameGenerator.nameWithExtraSpaces()));
     }
 
     @MethodSource("invalidNames")
@@ -91,7 +85,7 @@ public class UpdateNameTest extends BaseTest {
 
         new UpdateProfileRequester(
                 spec,
-                ResponseSpecs.requestResponseBadRequestWithMessage("Name must contain two words with letters only"))
+                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessages.INVALID_NAME))
                 .put(UpdateProfileRequest.builder().name(name).build());
 
         softly.assertThat(getProfileName())

@@ -1,13 +1,10 @@
 package iteration_2;
 
+import generators.AmountGenerator;
 import generators.RandomData;
 import io.restassured.specification.RequestSpecification;
 import iteration_1.BaseTest;
-import models.CreateAccountResponse;
-import models.CreateUserRequest;
-import models.DepositRequest;
-import models.TransactionData;
-import models.UserRole;
+import models.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,7 +36,7 @@ public class DepositMoneyTest extends BaseTest {
     }
 
     // создаёт пользователя через админа и возвращает спецификацию для запросов от его имени
-    private RequestSpecification createUser() {
+   public RequestSpecification createUser() {
         CreateUserRequest userRequest = CreateUserRequest.builder()
                 .username(RandomData.getUsername())
                 .password(RandomData.getPassword())
@@ -72,9 +69,10 @@ public class DepositMoneyTest extends BaseTest {
     // Позитивный кейс: граничные суммы 0.01, 4999.99, 5000
     public static Stream<Arguments> validDepositAmounts() {
         return Stream.of(
-                Arguments.of(new BigDecimal("5000.00")),
-                Arguments.of(new BigDecimal("4999.99")),
-                Arguments.of(new BigDecimal("0.01")));
+                Arguments.of(AmountGenerator.MAX_DEPOSIT),
+                Arguments.of(AmountGenerator.MAX_DEPOSIT.subtract(AmountGenerator.MIN_AMOUNT)),
+                Arguments.of(AmountGenerator.MIN_AMOUNT),
+                Arguments.of(AmountGenerator.validDepositAmount()));
     }
 
     @MethodSource("validDepositAmounts")
@@ -94,7 +92,7 @@ public class DepositMoneyTest extends BaseTest {
         TransactionData deposit = response.getTransactions().get(0);
 
         softly.assertThat(deposit.getId()).isNotNull().isPositive();
-        softly.assertThat(deposit.getType()).isEqualTo("DEPOSIT");
+        softly.assertThat(deposit.getType()).isEqualTo(OperationType.DEPOSIT.toString());
         softly.assertThat(deposit.getAmount()).isEqualByComparingTo(amount);
         softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) accountId);
         softly.assertThat(deposit.getTimestamp()).isNotNull();
@@ -111,9 +109,11 @@ public class DepositMoneyTest extends BaseTest {
     // Негативный кейс: сумма больше максимальной, 0 и отрицательная
     public static Stream<Arguments> invalidDepositAmounts() {
         return Stream.of(
-                Arguments.of(new BigDecimal("5000.01"), "Deposit amount cannot exceed 5000"),
-                Arguments.of(new BigDecimal("-1"), "Deposit amount must be at least 0.01"),
-                Arguments.of(new BigDecimal("0"), "Deposit amount must be at least 0.01"));
+                Arguments.of(AmountGenerator.MAX_DEPOSIT.add(AmountGenerator.MIN_AMOUNT), ErrorMessages.DEPOSIT_AMOUNT_EXCEEDS_LIMIT),
+                Arguments.of(AmountGenerator.negativeAmount(AmountGenerator.MAX_DEPOSIT), ErrorMessages.DEPOSIT_AMOUNT_TOO_SMALL),
+                Arguments.of(BigDecimal.ZERO, ErrorMessages.DEPOSIT_AMOUNT_TOO_SMALL),
+                Arguments.of(AmountGenerator.amountAbove(AmountGenerator.MAX_DEPOSIT), ErrorMessages.DEPOSIT_AMOUNT_EXCEEDS_LIMIT));
+
     }
 
     @MethodSource("invalidDepositAmounts")
@@ -137,19 +137,32 @@ public class DepositMoneyTest extends BaseTest {
 
         new DepositRequester(
                 userSpec,
-                ResponseSpecs.requestResponseForbidden("Unauthorized access to account"))
+                ResponseSpecs.requestResponseForbidden(ErrorMessages.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
                 .post(DepositRequest.builder()
                         .id(ownerAccountId)
-                        .balance(new BigDecimal("100.00"))
+                        .balance(AmountGenerator.validDepositAmount())
                         .build());
 
         // историю чужого счёта тоже читать нельзя
         new AccountTransactionsRequester(
                 userSpec,
-                ResponseSpecs.requestResponseForbidden("You do not have permission to access this account"))
+                ResponseSpecs.requestResponseForbidden(ErrorMessages.NO_PERMISSION_TO_ACCOUNT))
                 .get(ownerAccountId);
-
         //  у владельца счёта ничего не изменилось
         softly.assertThat(getTransactions(ownerSpec, ownerAccountId)).isEmpty();
+    }
+    // Негативный кейс: депозит на несуществующий счёт
+    @Test
+    public void userCannotDepositIntoNonExistentAccount() {
+        new DepositRequester(
+                userSpec,
+                ResponseSpecs.requestResponseForbidden(ErrorMessages.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
+                .post(DepositRequest.builder()
+                        .id(RandomData.getNonExistentAccountId())
+                        .balance(AmountGenerator.validDepositAmount())
+                        .build());
+
+        // свои счета остались пустыми
+        softly.assertThat(getTransactions(userSpec, accountId)).isEmpty();
     }
 }
