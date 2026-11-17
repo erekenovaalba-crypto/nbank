@@ -7,7 +7,7 @@ import io.restassured.specification.ResponseSpecification;
 
 import static io.restassured.RestAssured.given;
 
-// ВНИМАНИЕ: эндпоинт GET /api/v1/admin/users я предположила, сверьте его со Swagger
+
 public class AdminGetUsersRequester {
     private final RequestSpecification requestSpecification;
     private final ResponseSpecification responseSpecification;
