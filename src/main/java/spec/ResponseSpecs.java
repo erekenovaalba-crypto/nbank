@@ -1,5 +1,7 @@
 package spec;
 
+import models.ErrorMessage;
+import models.JsonField;
 import io.restassured.builder.ResponseSpecBuilder;
 import io.restassured.specification.ResponseSpecification;
 import org.apache.http.HttpStatus;
@@ -20,22 +22,24 @@ public class ResponseSpecs {
                 .expectStatusCode(HttpStatus.SC_OK)
                 .build();
     }
-    public static ResponseSpecification requestResponseBadRequest(String errorKey, String errorValue){
+    // ошибка в JSON: ключ поля и список сообщений
+    public static ResponseSpecification requestResponseBadRequest(JsonField errorKey, ErrorMessage errorMessage){
         return  defaultResponseBuilder()
                 .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
-                .expectBody(errorKey, Matchers.hasItem(errorValue))
+                .expectBody(errorKey.getName(), Matchers.hasItem(errorMessage.getMessage()))
                 .build();
     }
-    public static ResponseSpecification requestResponseBadRequestWithMessage(String message){
+    // ошибка приходит обычным текстом, а не JSON, поэтому сравниваем всё тело
+    public static ResponseSpecification requestResponseBadRequestWithMessage(ErrorMessage errorMessage){
         return  defaultResponseBuilder()
                 .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
-                .expectBody(Matchers.equalTo(message))
+                .expectBody(Matchers.equalTo(errorMessage.getMessage()))
                 .build();
     }
-    public static ResponseSpecification requestResponseForbidden(String message){
+    public static ResponseSpecification requestResponseForbidden(ErrorMessage errorMessage){
         return  defaultResponseBuilder()
                 .expectStatusCode(HttpStatus.SC_FORBIDDEN)
-                .expectBody(Matchers.equalTo(message))
+                .expectBody(Matchers.equalTo(errorMessage.getMessage()))
                 .build();
     }
 }

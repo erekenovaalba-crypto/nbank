@@ -6,6 +6,7 @@ import io.restassured.filter.log.ResponseLoggingFilter;
 import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
 import models.LoginUserRequest;
+import org.apache.http.HttpHeaders;
 import requests.LoginUserRequester;
 
 import java.util.List;
@@ -25,7 +26,7 @@ public class RequestSpecs {
     }
     public static RequestSpecification adminSpec(){
         return  defaultRequestBuilder()
-                .addHeader("Authorization", "Basic YWRtaW46YWRtaW4=")
+                .addHeader(HttpHeaders.AUTHORIZATION, "Basic YWRtaW46YWRtaW4=")
                 .build();
     }
     public static RequestSpecification authAsUser(String username, String password){
@@ -34,8 +35,8 @@ public class RequestSpecs {
                 ResponseSpecs.requestResponseOK())
                 .post(LoginUserRequest.builder().username(username).password(password).build())
                 .extract()
-                .header("Authorization");
+                .header(HttpHeaders.AUTHORIZATION);
         return defaultRequestBuilder()
-                .addHeader("Authorization", userAuthHeader).build();
+                .addHeader(HttpHeaders.AUTHORIZATION, userAuthHeader).build();
     }
 }

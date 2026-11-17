@@ -1,11 +1,16 @@
 package iteration_2;
 
+import models.ErrorMessage;
+import models.SuccessMessage;
 import generators.NameGenerator;
 import generators.RandomData;
 import io.restassured.specification.RequestSpecification;
 import iteration_1.BaseTest;
-import models.*;
-import models.SuccessMessages;
+import models.CreateUserRequest;
+import models.CustomerProfile;
+import models.UpdateProfileRequest;
+import models.UpdateProfileResponse;
+import models.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -62,14 +67,14 @@ public class UpdateNameTest extends BaseTest {
                 .put(UpdateProfileRequest.builder().name(name).build())
                 .extract().as(UpdateProfileResponse.class);
 
-        softly.assertThat(response.getMessage()).isEqualTo(SuccessMessages.PROFILE_UPDATED);
+        softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.PROFILE_UPDATED.getMessage());
         softly.assertThat(response.getCustomer().getName()).isEqualTo(name);
 
         // имя действительно сохранилось в профиле
         softly.assertThat(getProfileName()).isEqualTo(name);
     }
 
-    // Негативный кейс
+    // Негативный кейс: имя должно состоять из двух слов, только из букв
     public static Stream<Arguments> invalidNames() {
         return Stream.of(
                 Arguments.of(NameGenerator.singleWordName()),
@@ -85,7 +90,7 @@ public class UpdateNameTest extends BaseTest {
 
         new UpdateProfileRequester(
                 spec,
-                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessages.INVALID_NAME))
+                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME))
                 .put(UpdateProfileRequest.builder().name(name).build());
 
         softly.assertThat(getProfileName())

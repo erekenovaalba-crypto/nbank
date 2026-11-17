@@ -1,12 +1,11 @@
 package requests;
 
-import io.restassured.http.ContentType;
+
 import io.restassured.response.ValidatableResponse;
 import io.restassured.specification.RequestSpecification;
 import io.restassured.specification.ResponseSpecification;
 import models.BaseModel;
-import org.apache.http.HttpStatus;
-import org.hamcrest.Matchers;
+
 
 import static io.restassured.RestAssured.given;
 
@@ -24,5 +23,8 @@ public class CreateAccountRequester extends Request{
                 .assertThat()
                 .spec(responseSpecification);
 
+    }
+    public ValidatableResponse post() {
+        return post(null);
     }
 }

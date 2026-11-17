@@ -1,5 +1,5 @@
 package models;
 
-public enum OperationType {
+public enum TransactionType {
     DEPOSIT, TRANSFER_IN, TRANSFER_OUT
 }

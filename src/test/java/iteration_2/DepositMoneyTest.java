@@ -1,10 +1,16 @@
 package iteration_2;
 
+import models.ErrorMessage;
+import models.TransactionType;
 import generators.AmountGenerator;
 import generators.RandomData;
 import io.restassured.specification.RequestSpecification;
 import iteration_1.BaseTest;
-import models.*;
+import models.CreateAccountResponse;
+import models.CreateUserRequest;
+import models.DepositRequest;
+import models.TransactionData;
+import models.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -18,6 +24,7 @@ import spec.RequestSpecs;
 import spec.ResponseSpecs;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -36,7 +43,7 @@ public class DepositMoneyTest extends BaseTest {
     }
 
     // создаёт пользователя через админа и возвращает спецификацию для запросов от его имени
-   public RequestSpecification createUser() {
+    private RequestSpecification createUser() {
         CreateUserRequest userRequest = CreateUserRequest.builder()
                 .username(RandomData.getUsername())
                 .password(RandomData.getPassword())
@@ -54,24 +61,24 @@ public class DepositMoneyTest extends BaseTest {
     // создаёт счёт пользователю и возвращает его id
     private long createAccount(RequestSpecification spec) {
         return new CreateAccountRequester(spec, ResponseSpecs.entityWasCreated())
-                .post(null)
+                .post()
                 .extract().as(CreateAccountResponse.class)
                 .getId();
     }
 
     private List<TransactionData> getTransactions(RequestSpecification spec, long id) {
-        return new AccountTransactionsRequester(spec, ResponseSpecs.requestResponseOK())
+        TransactionData[] transactions = new AccountTransactionsRequester(spec, ResponseSpecs.requestResponseOK())
                 .get(id)
-                .extract().jsonPath()
-                .getList("", TransactionData.class);
+                .extract().as(TransactionData[].class);
+        return Arrays.asList(transactions);
     }
 
-    // Позитивный кейс: граничные суммы 0.01, 4999.99, 5000
+    // Позитивный кейс: граничные суммы и случайная сумма из допустимого диапазона
     public static Stream<Arguments> validDepositAmounts() {
         return Stream.of(
-                Arguments.of(AmountGenerator.MAX_DEPOSIT),
-                Arguments.of(AmountGenerator.MAX_DEPOSIT.subtract(AmountGenerator.MIN_AMOUNT)),
                 Arguments.of(AmountGenerator.MIN_AMOUNT),
+                Arguments.of(AmountGenerator.MAX_DEPOSIT.subtract(AmountGenerator.MIN_AMOUNT)),
+                Arguments.of(AmountGenerator.MAX_DEPOSIT),
                 Arguments.of(AmountGenerator.validDepositAmount()));
     }
 
@@ -89,10 +96,10 @@ public class DepositMoneyTest extends BaseTest {
 
         // счёт новый, значит транзакция должна быть ровно одна
         assertThat(response.getTransactions()).hasSize(1);
-        TransactionData deposit = response.getTransactions().get(0);
+        TransactionData deposit = response.getTransactions().getFirst();
 
         softly.assertThat(deposit.getId()).isNotNull().isPositive();
-        softly.assertThat(deposit.getType()).isEqualTo(OperationType.DEPOSIT.toString());
+        softly.assertThat(deposit.getType()).isEqualTo(TransactionType.DEPOSIT.name());
         softly.assertThat(deposit.getAmount()).isEqualByComparingTo(amount);
         softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) accountId);
         softly.assertThat(deposit.getTimestamp()).isNotNull();
@@ -100,25 +107,28 @@ public class DepositMoneyTest extends BaseTest {
         // то же самое должно быть в истории транзакций счёта
         List<TransactionData> stored = getTransactions(userSpec, accountId);
         assertThat(stored).hasSize(1);
-        softly.assertThat(stored.get(0))
+        softly.assertThat(stored.getFirst())
                 .usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                 .isEqualTo(deposit);
     }
 
-    // Негативный кейс: сумма больше максимальной, 0 и отрицательная
+    // Негативный кейс: граничные значения (лимит + 0.01 и ноль)
+    // и случайные суммы вне допустимого диапазона
     public static Stream<Arguments> invalidDepositAmounts() {
         return Stream.of(
-                Arguments.of(AmountGenerator.MAX_DEPOSIT.add(AmountGenerator.MIN_AMOUNT), ErrorMessages.DEPOSIT_AMOUNT_EXCEEDS_LIMIT),
-                Arguments.of(AmountGenerator.negativeAmount(AmountGenerator.MAX_DEPOSIT), ErrorMessages.DEPOSIT_AMOUNT_TOO_SMALL),
-                Arguments.of(BigDecimal.ZERO, ErrorMessages.DEPOSIT_AMOUNT_TOO_SMALL),
-                Arguments.of(AmountGenerator.amountAbove(AmountGenerator.MAX_DEPOSIT), ErrorMessages.DEPOSIT_AMOUNT_EXCEEDS_LIMIT));
-
+                Arguments.of(AmountGenerator.MAX_DEPOSIT.add(AmountGenerator.MIN_AMOUNT),
+                        ErrorMessage.DEPOSIT_AMOUNT_EXCEEDS_LIMIT),
+                Arguments.of(BigDecimal.ZERO, ErrorMessage.DEPOSIT_AMOUNT_TOO_SMALL),
+                Arguments.of(AmountGenerator.amountAbove(AmountGenerator.MAX_DEPOSIT),
+                        ErrorMessage.DEPOSIT_AMOUNT_EXCEEDS_LIMIT),
+                Arguments.of(AmountGenerator.negativeAmount(AmountGenerator.MAX_DEPOSIT),
+                        ErrorMessage.DEPOSIT_AMOUNT_TOO_SMALL));
     }
 
     @MethodSource("invalidDepositAmounts")
     @ParameterizedTest
-    public void userCannotDepositInvalidAmount(BigDecimal amount, String errorMessage) {
+    public void userCannotDepositInvalidAmount(BigDecimal amount, ErrorMessage errorMessage) {
         new DepositRequester(
                 userSpec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage))
@@ -137,7 +147,7 @@ public class DepositMoneyTest extends BaseTest {
 
         new DepositRequester(
                 userSpec,
-                ResponseSpecs.requestResponseForbidden(ErrorMessages.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
                 .post(DepositRequest.builder()
                         .id(ownerAccountId)
                         .balance(AmountGenerator.validDepositAmount())
@@ -146,17 +156,19 @@ public class DepositMoneyTest extends BaseTest {
         // историю чужого счёта тоже читать нельзя
         new AccountTransactionsRequester(
                 userSpec,
-                ResponseSpecs.requestResponseForbidden(ErrorMessages.NO_PERMISSION_TO_ACCOUNT))
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.NO_PERMISSION_TO_ACCOUNT))
                 .get(ownerAccountId);
-        //  у владельца счёта ничего не изменилось
+
+        // а у владельца счёта ничего не изменилось
         softly.assertThat(getTransactions(ownerSpec, ownerAccountId)).isEmpty();
     }
+
     // Негативный кейс: депозит на несуществующий счёт
     @Test
     public void userCannotDepositIntoNonExistentAccount() {
         new DepositRequester(
                 userSpec,
-                ResponseSpecs.requestResponseForbidden(ErrorMessages.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
                 .post(DepositRequest.builder()
                         .id(RandomData.getNonExistentAccountId())
                         .balance(AmountGenerator.validDepositAmount())
