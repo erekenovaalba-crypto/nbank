@@ -1,3 +1,4 @@
+/*
 
 package requests;
 
@@ -23,4 +24,4 @@ public class DepositRequester extends Request<DepositRequest> {
                 .assertThat()
                 .spec(responseSpecification);
     }
-}
+}*/

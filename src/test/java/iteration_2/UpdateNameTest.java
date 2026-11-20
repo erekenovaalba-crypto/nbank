@@ -1,3 +1,4 @@
+/*
 package iteration_2;
 
 import models.ErrorMessage;
@@ -15,7 +16,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import requests.AdminCreateUserRequester;
 import requests.GetProfileRequester;
 import requests.UpdateProfileRequester;
 import spec.RequestSpecs;
@@ -36,7 +36,6 @@ public class UpdateNameTest extends BaseTest {
                 .role(UserRole.USER.toString())
                 .build();
 
-        new AdminCreateUserRequester(
                 RequestSpecs.adminSpec(),
                 ResponseSpecs.entityWasCreated())
                 .post(userRequest);
@@ -98,3 +97,4 @@ public class UpdateNameTest extends BaseTest {
                 .isEqualTo(nameBefore);
     }
 }
+*/

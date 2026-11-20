@@ -1,3 +1,4 @@
+/*
 package requests;
 
 import io.restassured.response.ValidatableResponse;
@@ -22,4 +23,4 @@ public class TransferRequester extends Request<TransferRequest> {
                 .assertThat()
                 .spec(responseSpecification);
     }
-}
+}*/

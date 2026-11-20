@@ -1,20 +1,23 @@
 package requests.skelethon;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
-
+import models.*;
 @Getter
+@AllArgsConstructor
 public enum Endpoint {
-    LOGIN("/api/v1/auth/login"),
-    ADMIN_USERS("/api/v1/admin/users"),
-    CREATE_ACCOUNT("/api/v1/accounts"),
-    DEPOSIT("/api/v1/accounts/deposit"),
-    TRANSFER("/api/v1/accounts/transfer"),
-    ACCOUNT_TRANSACTIONS("/api/v1/accounts/{accountId}/transactions"),
-    CUSTOMER_PROFILE("/api/v1/customer/profile");
 
-    private final String path;
+    LOGIN("/auth/login" , LoginUserRequest.class, LoginUserResponse.class),
+    ADMIN_USER("/admin/users", CreateUserRequest.class, CreateUserResponse.class),
+    CREATE_ACCOUNT("/accounts", BaseModel.class, CreateAccountResponse.class ),
+    DEPOSIT("/accounts/deposit", DepositRequest.class, BaseModel.class),
+    TRANSFER("/accounts/transfer", TransferRequest.class, TransferResponse.class),
+    ACCOUNT_TRANSACTIONS("/accounts/{accountId}/transactions", BaseModel.class, BaseModel.class),
+    CUSTOMER_PROFILE("/customer/profile", UpdateProfileRequest.class, UpdateProfileResponse.class);
 
-    Endpoint(String path) {
-        this.path = path;
-    }
+
+    private  final String url;
+    private  final Class<? extends BaseModel> requestModel;
+    private  final Class<? extends BaseModel> responseModel;
+
 }

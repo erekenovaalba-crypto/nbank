@@ -1,13 +1,17 @@
 package iteration_1;
 
 import generators.RandomData;
+import generators.RandomModelGenerator;
 import models.CreateUserRequest;
+import models.CreateUserResponse;
 import models.LoginUserRequest;
 import models.UserRole;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
-import requests.AdminCreateUserRequester;
-import requests.LoginUserRequester;
+import requests.skelethon.Endpoint;
+import requests.skelethon.requesters.CrudRequester;
+import requests.skelethon.requesters.ValidatedCrudRequesters;
+import requests.steps.AdminSteps;
 import spec.RequestSpecs;
 import spec.ResponseSpecs;
 
@@ -22,27 +26,23 @@ public class LoginUserTest {
                 .username("admin")
                 .password("admin")
                 .build();
-        new LoginUserRequester(RequestSpecs.unauthSpec(), ResponseSpecs.requestResponseOK())
+        new ValidatedCrudRequesters<CreateUserResponse>(RequestSpecs.unauthenticSpec(),
+                Endpoint.LOGIN,
+                ResponseSpecs.requestResponseOK())
                 .post(userRequest);
     }
 
 
-    @Test
+  @Test
     public void userCanGenerateAuthTokenTest() {
-      CreateUserRequest userRequest = CreateUserRequest.builder()
-              .username(RandomData.getUsername())
-              .password(RandomData.getPassword())
-              .role(UserRole.USER.toString())
-              .build();
-        //создание пользователя
-        new AdminCreateUserRequester(RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
+      CreateUserRequest userRequest = AdminSteps.createUser();
         //логин
-        new LoginUserRequester(RequestSpecs.unauthSpec(),
+        new CrudRequester(RequestSpecs.unauthenticSpec(),
+                Endpoint.LOGIN,
                 ResponseSpecs.requestResponseOK())
                 .post(LoginUserRequest.builder().username(userRequest.getUsername()).password(userRequest.getPassword()).build())
                 .header("Authorization",Matchers.notNullValue());
 
     }
+
 }

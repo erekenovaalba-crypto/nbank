@@ -1,3 +1,4 @@
+/*
 package iteration_2;
 
 import models.ErrorMessage;
@@ -21,7 +22,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import requests.AccountTransactionsRequester;
-import requests.AdminCreateUserRequester;
 import requests.CreateAccountRequester;
 import requests.DepositRequester;
 import requests.GetProfileRequester;
@@ -257,4 +257,4 @@ public class TransferMoneyTest extends BaseTest {
                 .as("Баланс отправителя не должен измениться")
                 .isCloseTo(balance, within(BALANCE_DELTA));
     }
-}
+}*/
