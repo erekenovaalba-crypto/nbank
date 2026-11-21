@@ -1,6 +1,7 @@
 package iteration_1;
 
 import generators.RandomData;
+import models.AuthConstants;
 import models.CreateUserRequest;
 import models.LoginUserRequest;
 import models.UserRole;
@@ -11,16 +12,14 @@ import requests.LoginUserRequester;
 import spec.RequestSpecs;
 import spec.ResponseSpecs;
 
-import static io.restassured.RestAssured.given;
-
 public class LoginUserTest {
 
     //войти админом
     @Test
     public void adminCanGenerateAuthTokenTest() {
         LoginUserRequest userRequest = LoginUserRequest.builder()
-                .username("admin")
-                .password("admin")
+                .username(AuthConstants.ADMIN_USERNAME)
+                .password(AuthConstants.ADMIN_PASSWORD)
                 .build();
         new LoginUserRequester(RequestSpecs.unauthSpec(), ResponseSpecs.requestResponseOK())
                 .post(userRequest);
@@ -42,7 +41,7 @@ public class LoginUserTest {
         new LoginUserRequester(RequestSpecs.unauthSpec(),
                 ResponseSpecs.requestResponseOK())
                 .post(LoginUserRequest.builder().username(userRequest.getUsername()).password(userRequest.getPassword()).build())
-                .header("Authorization",Matchers.notNullValue());
+                .header(AuthConstants.HEADER_AUTHORIZATION,Matchers.notNullValue());
 
     }
 }

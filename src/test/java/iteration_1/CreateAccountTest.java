@@ -5,10 +5,14 @@ import models.*;
 import org.junit.jupiter.api.Test;
 import requests.AdminCreateUserRequester;
 import requests.CreateAccountRequester;
+import requests.GetProfileRequester;
 import spec.RequestSpecs;
 import spec.ResponseSpecs;
 
 import java.math.BigDecimal;
+import java.util.Optional;
+
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class CreateAccountTest extends BaseTest{
     @Test
@@ -34,6 +38,23 @@ public class CreateAccountTest extends BaseTest{
                 .isNotNull();
         softly.assertThat(createAccountResponse.getBalance()).as("Проверка, что равна 0")
                 .isEqualByComparingTo(BigDecimal.ZERO);
+        //get
+        CustomerProfile profile = new GetProfileRequester(RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword()), ResponseSpecs.requestResponseOK())
+                .get().extract().as(CustomerProfile.class);
 
+        Optional<CreateAccountResponse> accountInProfile = profile.getAccounts().stream()
+                .filter(account -> account.getId() == createAccountResponse.getId())
+                .findFirst();
+        assertThat(accountInProfile)
+                .as("Созданный счёт должен быть в профиле пользователя")
+                .isPresent();
+
+        CreateAccountResponse savedAccount = accountInProfile.get();
+        softly.assertThat(savedAccount.getAccountNumber()).as("Номер сохранённого счёта")
+                .isEqualTo(createAccountResponse.getAccountNumber());
+        softly.assertThat(savedAccount.getBalance()).as("Баланс сохранённого счёта")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        softly.assertThat(profile.getAccounts()).as("У нового пользователя должен быть ровно один счёт")
+                .hasSize(1);
     }
 }

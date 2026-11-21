@@ -16,7 +16,7 @@ public class CreateAccountRequester extends Request{
 
     @Override
     public ValidatableResponse post(BaseModel model) {
-        return        given()
+        return   given()
                 .spec(requestSpecification)
                 .post("/api/v1/accounts")
                 .then()

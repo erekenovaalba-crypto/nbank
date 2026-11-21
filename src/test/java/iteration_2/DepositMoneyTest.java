@@ -8,6 +8,7 @@ import io.restassured.specification.RequestSpecification;
 import iteration_1.BaseTest;
 import models.CreateAccountResponse;
 import models.CreateUserRequest;
+import models.CustomerProfile;
 import models.DepositRequest;
 import models.TransactionData;
 import models.UserRole;
@@ -20,6 +21,7 @@ import requests.AccountTransactionsRequester;
 import requests.AdminCreateUserRequester;
 import requests.CreateAccountRequester;
 import requests.DepositRequester;
+import requests.GetProfileRequester;
 import spec.RequestSpecs;
 import spec.ResponseSpecs;
 
@@ -65,12 +67,25 @@ public class DepositMoneyTest extends BaseTest {
                 .extract().as(CreateAccountResponse.class)
                 .getId();
     }
-
+//получение транзакций с помощью GET запроса
     private List<TransactionData> getTransactions(RequestSpecification spec, long id) {
         TransactionData[] transactions = new AccountTransactionsRequester(spec, ResponseSpecs.requestResponseOK())
                 .get(id)
                 .extract().as(TransactionData[].class);
         return Arrays.asList(transactions);
+    }
+
+    // баланс счёта берём из профиля: GET /api/v1/customer/profile возвращает счета пользователя
+    private BigDecimal getBalance(RequestSpecification spec, long id) {
+        return new GetProfileRequester(spec, ResponseSpecs.requestResponseOK())
+                .get()
+                .extract().as(CustomerProfile.class)
+                .getAccounts()
+                .stream()
+                .filter(account -> account.getId() == id)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Счёт " + id + " не найден у пользователя"))
+                .getBalance();
     }
 
     // Позитивный кейс: граничные суммы и случайная сумма из допустимого диапазона
@@ -85,6 +100,7 @@ public class DepositMoneyTest extends BaseTest {
     @MethodSource("validDepositAmounts")
     @ParameterizedTest
     public void userCanDepositMoneyIntoOwnAccount(BigDecimal amount) {
+        //POST
         CreateAccountResponse response = new DepositRequester(
                 userSpec,
                 ResponseSpecs.requestResponseOK())
@@ -94,7 +110,7 @@ public class DepositMoneyTest extends BaseTest {
         softly.assertThat(response.getId()).isEqualTo(accountId);
         softly.assertThat(response.getBalance()).as("Баланс в ответе депозита").isEqualByComparingTo(amount);
 
-        // счёт новый, значит транзакция должна быть ровно одна
+        // GET счёт новый, значит транзакция должна быть ровно одна
         assertThat(response.getTransactions()).hasSize(1);
         TransactionData deposit = response.getTransactions().getFirst();
 
@@ -104,7 +120,12 @@ public class DepositMoneyTest extends BaseTest {
         softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) accountId);
         softly.assertThat(deposit.getTimestamp()).isNotNull();
 
-        // то же самое должно быть в истории транзакций счёта
+        // баланс счёта в профиле действительно изменился
+        softly.assertThat(getBalance(userSpec, accountId))
+                .as("Баланс счёта в профиле после депозита")
+                .isEqualByComparingTo(amount);
+
+        // GET то же самое должно быть в истории транзакций счёта
         List<TransactionData> stored = getTransactions(userSpec, accountId);
         assertThat(stored).hasSize(1);
         softly.assertThat(stored.getFirst())
@@ -129,11 +150,12 @@ public class DepositMoneyTest extends BaseTest {
     @MethodSource("invalidDepositAmounts")
     @ParameterizedTest
     public void userCannotDepositInvalidAmount(BigDecimal amount, ErrorMessage errorMessage) {
+        //POST
         new DepositRequester(
                 userSpec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage))
                 .post(DepositRequest.builder().id(accountId).balance(amount).build());
-
+        //GET
         softly.assertThat(getTransactions(userSpec, accountId))
                 .as("После неудачного депозита транзакций быть не должно")
                 .isEmpty();
@@ -152,7 +174,7 @@ public class DepositMoneyTest extends BaseTest {
                         .id(ownerAccountId)
                         .balance(AmountGenerator.validDepositAmount())
                         .build());
-
+        //GET
         // историю чужого счёта тоже читать нельзя
         new AccountTransactionsRequester(
                 userSpec,
@@ -174,7 +196,7 @@ public class DepositMoneyTest extends BaseTest {
                         .balance(AmountGenerator.validDepositAmount())
                         .build());
 
-        // свои счета остались пустыми
+        // GET свои счета остались пустыми
         softly.assertThat(getTransactions(userSpec, accountId)).isEmpty();
     }
 }

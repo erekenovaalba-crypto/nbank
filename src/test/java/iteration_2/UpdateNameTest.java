@@ -70,7 +70,7 @@ public class UpdateNameTest extends BaseTest {
         softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.PROFILE_UPDATED.getMessage());
         softly.assertThat(response.getCustomer().getName()).isEqualTo(name);
 
-        // имя действительно сохранилось в профиле
+        // GET имя действительно сохранилось в профиле
         softly.assertThat(getProfileName()).isEqualTo(name);
     }
 
@@ -92,7 +92,7 @@ public class UpdateNameTest extends BaseTest {
                 spec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME))
                 .put(UpdateProfileRequest.builder().name(name).build());
-
+//GET
         softly.assertThat(getProfileName())
                 .as("Имя в профиле не должно измениться")
                 .isEqualTo(nameBefore);

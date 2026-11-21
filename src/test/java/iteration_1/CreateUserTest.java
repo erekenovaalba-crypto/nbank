@@ -1,11 +1,6 @@
 package iteration_1;
-
-import models.ErrorMessage;
-import models.JsonField;
+import models.*;
 import generators.RandomData;
-import models.CreateUserRequest;
-import models.CreateUserResponse;
-import models.UserRole;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -14,13 +9,21 @@ import requests.AdminCreateUserRequester;
 import requests.AdminGetUsersRequester;
 import spec.RequestSpecs;
 import spec.ResponseSpecs;
-
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public class CreateUserTest extends BaseTest{
-
+public class CreateUserTest extends BaseTest {
+    //get
+    //get
+    private List<CreateUserResponse> getUsers() {
+        CreateUserResponse[] users = new AdminGetUsersRequester(RequestSpecs.adminSpec(), ResponseSpecs.requestResponseOK())
+                .get()
+                .extract().as(CreateUserResponse[].class);
+        return Arrays.asList(users);
+    }
     @Test
     public void adminCanCreateUserWithCorrectDataTest() {
         CreateUserRequest createUserRequest =  CreateUserRequest.builder()
@@ -31,8 +34,21 @@ public class CreateUserTest extends BaseTest{
         CreateUserResponse createUserResponse = new AdminCreateUserRequester(RequestSpecs.adminSpec(), ResponseSpecs.entityWasCreated())
                 .post(createUserRequest).extract().as(CreateUserResponse.class);
         softly.assertThat(createUserRequest.getUsername()).isEqualTo(createUserResponse.getUsername());
-        softly.assertThat(createUserRequest.getPassword()).isNotEqualTo(createUserResponse.getUsername());
+        softly.assertThat(createUserRequest.getPassword()).isNotEqualTo(createUserResponse.getPassword());
         softly.assertThat(createUserRequest.getRole()).isEqualTo(createUserResponse.getRole());
+        //GET
+        Optional<CreateUserResponse> savedUser = getUsers().stream()
+                .filter(user -> user.getId() == createUserResponse.getId())
+                .findFirst();
+        assertThat(savedUser)
+                .as("Созданный пользователь должен быть в списке пользователей")
+                .isPresent();
+        softly.assertThat(savedUser.get().getUsername()).as("Логин сохранённого пользователя")
+                .isEqualTo(createUserRequest.getUsername());
+        softly.assertThat(savedUser.get().getRole()).as("Роль сохранённого пользователя")
+                .isEqualTo(createUserRequest.getRole());
+        softly.assertThat(savedUser.get().getPassword()).as("Пароль сохранённого пользователя хранится в виде хеша")
+                .isNotEqualTo(createUserRequest.getPassword());
     }
 
 
@@ -59,19 +75,11 @@ public class CreateUserTest extends BaseTest{
                 ResponseSpecs.requestResponseBadRequest(errorKey,errorValue))
                 .post(createUserRequest);
 
-        // статус 400 ещё не значит, что пользователь не создан: проверяем фактическое состояние через GET
-        softly.assertThat(getUsernames())
+        //GET
+        softly.assertThat(getUsers())
+                .extracting(CreateUserResponse::getUsername)
                 .as("Пользователь с некорректными данными не должен быть создан")
                 .doesNotContain(username);
-    }
-
-    private List<String> getUsernames() {
-        CreateUserResponse[] users = new AdminGetUsersRequester(RequestSpecs.adminSpec(), ResponseSpecs.requestResponseOK())
-                .get()
-                .extract().as(CreateUserResponse[].class);
-        return Arrays.stream(users)
-                .map(CreateUserResponse::getUsername)
-                .toList();
     }
 
 }

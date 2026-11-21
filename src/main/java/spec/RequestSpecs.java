@@ -29,7 +29,7 @@ public class RequestSpecs {
                 .addHeader(HttpHeaders.AUTHORIZATION, "Basic YWRtaW46YWRtaW4=")
                 .build();
     }
-    public static RequestSpecification authAsUser(String username, String password){
+    public static RequestSpecification authAsUser(String username, String password) {
         String userAuthHeader = new LoginUserRequester(
                 RequestSpecs.unauthSpec(),
                 ResponseSpecs.requestResponseOK())
