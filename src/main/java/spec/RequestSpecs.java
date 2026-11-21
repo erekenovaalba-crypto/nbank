@@ -5,6 +5,7 @@ import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
 import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
+import models.AuthConstants;
 import models.LoginUserRequest;
 import org.apache.http.HttpHeaders;
 import requests.LoginUserRequester;
@@ -38,5 +39,9 @@ public class RequestSpecs {
                 .header(HttpHeaders.AUTHORIZATION);
         return defaultRequestBuilder()
                 .addHeader(HttpHeaders.AUTHORIZATION, userAuthHeader).build();
+    }
+    public static RequestSpecification authWithToken(String authHeader){
+        return defaultRequestBuilder()
+                .addHeader(AuthConstants.HEADER_AUTHORIZATION, authHeader).build();
     }
 }

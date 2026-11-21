@@ -38,7 +38,7 @@ public class CreateAccountTest extends BaseTest{
                 .isNotNull();
         softly.assertThat(createAccountResponse.getBalance()).as("Проверка, что равна 0")
                 .isEqualByComparingTo(BigDecimal.ZERO);
-        //get
+        //GET
         CustomerProfile profile = new GetProfileRequester(RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword()), ResponseSpecs.requestResponseOK())
                 .get().extract().as(CustomerProfile.class);
 

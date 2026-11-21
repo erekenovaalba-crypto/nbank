@@ -16,8 +16,6 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CreateUserTest extends BaseTest {
-    //get
-    //get
     private List<CreateUserResponse> getUsers() {
         CreateUserResponse[] users = new AdminGetUsersRequester(RequestSpecs.adminSpec(), ResponseSpecs.requestResponseOK())
                 .get()

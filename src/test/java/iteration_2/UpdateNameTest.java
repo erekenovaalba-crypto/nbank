@@ -92,7 +92,7 @@ public class UpdateNameTest extends BaseTest {
                 spec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME))
                 .put(UpdateProfileRequest.builder().name(name).build());
-//GET
+        //GET
         softly.assertThat(getProfileName())
                 .as("Имя в профиле не должно измениться")
                 .isEqualTo(nameBefore);
