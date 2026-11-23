@@ -7,6 +7,7 @@ import models.DepositRequest;
 import models.ErrorMessage;
 import models.TransactionData;
 import models.TransactionType;
+import generators.RandomData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -132,5 +133,21 @@ public class DepositMoneyTest extends BaseTest {
                 ownerSpec, ResponseSpecs.requestResponseOK())
                 .get(ownerAccount.getId()).extract().as(TransactionData[].class);
         softly.assertThat(ownerHistory).isEmpty();
+    }
+
+    @Test
+    public void userCannotDepositIntoNonExistentAccount() {
+        long unknownAccountId = RandomData.getNonExistentAccountId();
+
+        new CrudRequester(userSpec, Endpoint.DEPOSIT,
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
+                .post(DepositRequest.builder()
+                        .id(unknownAccountId)
+                        .balance(AmountGenerator.validDepositAmount())
+                        .build());
+
+        softly.assertThat(getTransactions(accountId))
+                .as("Попытка пополнить несуществующий счёт не должна менять историю своего счёта")
+                .isEmpty();
     }
 }
