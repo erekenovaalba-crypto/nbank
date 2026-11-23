@@ -14,7 +14,7 @@ public class AdminSteps {
     public static CreateUserRequest createUser(){
         CreateUserRequest userRequest =
                 RandomModelGenerator.generate(CreateUserRequest.class);
-        //создание пользователя
+        //создание пользователя админом
        new ValidatedCrudRequesters<CreateUserResponse>(
                 RequestSpecs.adminSpec(),
                 Endpoint.ADMIN_USER,

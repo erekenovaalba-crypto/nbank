@@ -12,7 +12,7 @@ public enum Endpoint {
     CREATE_ACCOUNT("/accounts", BaseModel.class, CreateAccountResponse.class ),
     DEPOSIT("/accounts/deposit", DepositRequest.class, BaseModel.class),
     TRANSFER("/accounts/transfer", TransferRequest.class, TransferResponse.class),
-    ACCOUNT_TRANSACTIONS("/accounts/{accountId}/transactions", BaseModel.class, BaseModel.class),
+    ACCOUNT_TRANSACTIONS("/accounts/{accountId}/transactions", BaseModel.class, TransactionData.class),
     CUSTOMER_PROFILE("/customer/profile", UpdateProfileRequest.class, UpdateProfileResponse.class);
 
 
