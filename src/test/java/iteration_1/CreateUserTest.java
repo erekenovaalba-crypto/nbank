@@ -4,6 +4,7 @@ import generators.RandomData;
 import generators.RandomModelGenerator;
 import models.CreateUserRequest;
 import models.CreateUserResponse;
+import models.CustomerProfile;
 import models.ErrorMessage;
 import models.JsonField;
 import models.UserRole;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import requests.GetProfileRequester;
 import requests.skelethon.Endpoint;
 import requests.skelethon.requesters.CrudRequester;
 import requests.skelethon.requesters.ValidatedCrudRequesters;
@@ -33,8 +35,20 @@ public class CreateUserTest extends BaseTest {
                 ResponseSpecs.entityWasCreated())
                 .post(userRequest);
 
-        // Assert
+        // Assert: POST response
         comparison.ModelAssertions.assertThatModels(userRequest, userResponse).match();
+
+        // Assert: GET persisted user profile
+        CustomerProfile profile = new GetProfileRequester(
+                RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword()),
+                ResponseSpecs.requestResponseOK())
+                .get()
+                .extract().as(CustomerProfile.class);
+
+        softly.assertThat(profile.getId()).isPositive();
+        softly.assertThat(profile.getUsername()).isEqualTo(userRequest.getUsername());
+        softly.assertThat(profile.getRole()).isEqualTo(userRequest.getRole());
+        softly.assertThat(profile.getAccounts()).isEmpty();
     }
 
     private static final String BLANK_USERNAME = "    ";
@@ -64,5 +78,8 @@ public class CreateUserTest extends BaseTest {
                 Endpoint.ADMIN_USER,
                 ResponseSpecs.requestResponseBadRequest(errorKey, errorValue))
                 .post(request);
+
+        // Invalid user cannot authenticate; verify rejection through login is covered
+        // by the endpoint's 400 response contract above.
     }
 }
