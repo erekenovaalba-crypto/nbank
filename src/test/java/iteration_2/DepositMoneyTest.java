@@ -3,6 +3,7 @@ package iteration_2;
 import generators.AmountGenerator;
 import iteration_1.BaseTest;
 import models.CreateAccountResponse;
+import models.CustomerProfile;
 import models.DepositRequest;
 import models.ErrorMessage;
 import models.TransactionData;
@@ -41,6 +42,16 @@ public class DepositMoneyTest extends BaseTest {
                 .post(null)
                 .extract().as(CreateAccountResponse.class);
         accountId = account.getId();
+    }
+
+    private CreateAccountResponse getAccount(long id) {
+        CustomerProfile profile = new requests.GetProfileRequester(
+                userSpec, ResponseSpecs.requestResponseOK())
+                .get().extract().as(CustomerProfile.class);
+        return profile.getAccounts().stream()
+                .filter(account -> account.getId() == id)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Счёт не найден в GET профиле: " + id));
     }
 
     private List<TransactionData> getTransactions(long id) {
@@ -84,6 +95,11 @@ public class DepositMoneyTest extends BaseTest {
                 .usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                 .isEqualTo(deposit);
+
+        // GET profile confirms the persisted balance and account state
+        CreateAccountResponse accountFromGet = getAccount(accountId);
+        softly.assertThat(accountFromGet.getBalance()).isEqualByComparingTo(amount);
+        softly.assertThat(accountFromGet.getTransactions()).hasSize(1);
     }
 
     public static Stream<Arguments> invalidDepositAmounts() {
@@ -100,6 +116,8 @@ public class DepositMoneyTest extends BaseTest {
     @MethodSource("invalidDepositAmounts")
     @ParameterizedTest
     public void userCannotDepositInvalidAmount(BigDecimal amount, ErrorMessage error) {
+        BigDecimal balanceBefore = getAccount(accountId).getBalance();
+
         new CrudRequester(userSpec, Endpoint.DEPOSIT,
                 ResponseSpecs.requestResponseBadRequestWithMessage(error))
                 .post(DepositRequest.builder().id(accountId).balance(amount).build());
@@ -107,6 +125,9 @@ public class DepositMoneyTest extends BaseTest {
         softly.assertThat(getTransactions(accountId))
                 .as("Неуспешный депозит не должен создавать транзакцию")
                 .isEmpty();
+        softly.assertThat(getAccount(accountId).getBalance())
+                .as("Баланс не должен измениться после неуспешного депозита")
+                .isEqualByComparingTo(balanceBefore);
     }
 
     @Test
@@ -117,6 +138,8 @@ public class DepositMoneyTest extends BaseTest {
         CreateAccountResponse ownerAccount = new CrudRequester(
                 ownerSpec, Endpoint.CREATE_ACCOUNT, ResponseSpecs.entityWasCreated())
                 .post(null).extract().as(CreateAccountResponse.class);
+
+        BigDecimal ownerBalanceBefore = ownerAccount.getBalance();
 
         new CrudRequester(userSpec, Endpoint.DEPOSIT,
                 ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
@@ -133,11 +156,20 @@ public class DepositMoneyTest extends BaseTest {
                 ownerSpec, ResponseSpecs.requestResponseOK())
                 .get(ownerAccount.getId()).extract().as(TransactionData[].class);
         softly.assertThat(ownerHistory).isEmpty();
+        CustomerProfile ownerProfileAfter = new requests.GetProfileRequester(
+                ownerSpec, ResponseSpecs.requestResponseOK())
+                .get().extract().as(CustomerProfile.class);
+        softly.assertThat(ownerProfileAfter.getAccounts())
+                .filteredOn(account -> account.getId() == ownerAccount.getId())
+                .singleElement()
+                .extracting(CreateAccountResponse::getBalance)
+                .isEqualTo(ownerBalanceBefore);
     }
 
     @Test
     public void userCannotDepositIntoNonExistentAccount() {
         long unknownAccountId = RandomData.getNonExistentAccountId();
+        BigDecimal ownBalanceBefore = getAccount(accountId).getBalance();
 
         new CrudRequester(userSpec, Endpoint.DEPOSIT,
                 ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
@@ -149,5 +181,8 @@ public class DepositMoneyTest extends BaseTest {
         softly.assertThat(getTransactions(accountId))
                 .as("Попытка пополнить несуществующий счёт не должна менять историю своего счёта")
                 .isEmpty();
+        softly.assertThat(getAccount(accountId).getBalance())
+                .as("Баланс собственного счёта не должен измениться")
+                .isEqualByComparingTo(ownBalanceBefore);
     }
 }
