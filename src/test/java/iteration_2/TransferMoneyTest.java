@@ -42,7 +42,7 @@ public class TransferMoneyTest extends BaseTest {
     // на счёте больше лимита перевода, чтобы срабатывала проверка суммы, а не нехватка средств
     private static final BigDecimal BALANCE_ABOVE_TRANSFER_LIMIT =
             AmountGenerator.MAX_TRANSFER.add(AmountGenerator.MAX_DEPOSIT);
-    // сервер хранит баланс как double (например 24349.699999999983), поэтому сравниваем с допуском
+    // сервер хранит баланс как double
     private static final BigDecimal BALANCE_DELTA = new BigDecimal("0.005");
 
     private RequestSpecification spec;
@@ -131,6 +131,7 @@ public class TransferMoneyTest extends BaseTest {
     }
 
     private void transferExpectingError(long from, long to, BigDecimal amount, ErrorMessage errorMessage) {
+        //POST
         new TransferRequester(
                 spec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage))
@@ -140,7 +141,7 @@ public class TransferMoneyTest extends BaseTest {
                         .amount(amount)
                         .build());
     }
-
+    //GET
     private void assertNothingWasTransferred() {
         softly.assertThat(getTransactions(senderId))
                 .extracting(TransactionData::getType)
@@ -165,6 +166,7 @@ public class TransferMoneyTest extends BaseTest {
         fundAccount(senderId, amount);
         BigDecimal senderBefore = getBalance(senderId);
         BigDecimal receiverBefore = getBalance(receiverId);
+        //POST
 
         TransferResponse response = new TransferRequester(
                 spec,
@@ -180,13 +182,14 @@ public class TransferMoneyTest extends BaseTest {
         softly.assertThat(response.getReceiverAccountId()).isEqualTo(receiverId);
         softly.assertThat(response.getAmount()).isEqualByComparingTo(amount);
         softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.TRANSFER_SUCCESSFUL.getMessage());
-
+        //GET проверка баланса
         softly.assertThat(getBalance(senderId))
                 .as("Баланс отправителя")
                 .isCloseTo(senderBefore.subtract(amount), within(BALANCE_DELTA));
         softly.assertThat(getBalance(receiverId))
                 .as("Баланс получателя")
                 .isCloseTo(receiverBefore.add(amount), within(BALANCE_DELTA));
+        //GET проверка транзакций у получателя и отправителя
 
         TransactionData out = singleTransaction(getTransactions(senderId), TransactionType.TRANSFER_OUT);
         softly.assertThat(out.getId()).isNotNull().isPositive();
@@ -221,6 +224,14 @@ public class TransferMoneyTest extends BaseTest {
         transferExpectingError(senderId, receiverId, amount, errorMessage);
 
         assertNothingWasTransferred();
+        //GET
+        softly.assertThat(getBalance(senderId))
+                .as("Баланс отправителя не должен измениться")
+                .isCloseTo(BALANCE_ABOVE_TRANSFER_LIMIT, within(BALANCE_DELTA));
+        softly.assertThat(getBalance(receiverId))
+                .as("Баланс получателя не должен измениться")
+                .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
+
     }
 
     // Негативный кейс: перевод больше, чем есть на счёте
@@ -253,6 +264,7 @@ public class TransferMoneyTest extends BaseTest {
         transferExpectingError(senderId, RandomData.getNonExistentAccountId(), amount, ErrorMessage.INVALID_TRANSFER);
 
         assertNothingWasTransferred();
+        //GET
         softly.assertThat(getBalance(senderId))
                 .as("Баланс отправителя не должен измениться")
                 .isCloseTo(balance, within(BALANCE_DELTA));
