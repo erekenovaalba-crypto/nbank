@@ -1,23 +1,20 @@
-/*
 package iteration_2;
 
+import generators.NameGenerator;
+import iteration_1.BaseTest;
+import models.CustomerProfile;
 import models.ErrorMessage;
 import models.SuccessMessage;
-import generators.NameGenerator;
-import generators.RandomData;
-import io.restassured.specification.RequestSpecification;
-import iteration_1.BaseTest;
-import models.CreateUserRequest;
-import models.CustomerProfile;
 import models.UpdateProfileRequest;
 import models.UpdateProfileResponse;
-import models.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import requests.GetProfileRequester;
 import requests.UpdateProfileRequester;
+import requests.steps.AdminSteps;
+import io.restassured.specification.RequestSpecification;
 import spec.RequestSpecs;
 import spec.ResponseSpecs;
 
@@ -27,30 +24,20 @@ public class UpdateNameTest extends BaseTest {
 
     private RequestSpecification spec;
 
-    // у каждого теста свой новый пользователь
     @BeforeEach
     public void setupUser() {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUsername())
-                .password(RandomData.getPassword())
-                .role(UserRole.USER.toString())
-                .build();
-
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
+        var userRequest = AdminSteps.createUser();
         spec = RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword());
     }
 
     private String getProfileName() {
         return new GetProfileRequester(spec, ResponseSpecs.requestResponseOK())
                 .get()
-                .extract().as(CustomerProfile.class)
+                .extract()
+                .as(CustomerProfile.class)
                 .getName();
     }
 
-    // Позитивный кейс: два слова из букв, с заглавными и строчными буквами
     public static Stream<Arguments> validNames() {
         return Stream.of(
                 Arguments.of(NameGenerator.validName()),
@@ -64,16 +51,17 @@ public class UpdateNameTest extends BaseTest {
                 spec,
                 ResponseSpecs.requestResponseOK())
                 .put(UpdateProfileRequest.builder().name(name).build())
-                .extract().as(UpdateProfileResponse.class);
+                .extract()
+                .as(UpdateProfileResponse.class);
 
-        softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.PROFILE_UPDATED.getMessage());
+        softly.assertThat(response.getMessage())
+                .isEqualTo(SuccessMessage.PROFILE_UPDATED.getMessage());
         softly.assertThat(response.getCustomer().getName()).isEqualTo(name);
-
-        // GET имя действительно сохранилось в профиле
-        softly.assertThat(getProfileName()).isEqualTo(name);
+        softly.assertThat(getProfileName())
+                .as("Имя должно сохраниться в профиле")
+                .isEqualTo(name);
     }
 
-    // Негативный кейс: имя должно состоять из двух слов, только из букв
     public static Stream<Arguments> invalidNames() {
         return Stream.of(
                 Arguments.of(NameGenerator.singleWordName()),
@@ -91,10 +79,9 @@ public class UpdateNameTest extends BaseTest {
                 spec,
                 ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME))
                 .put(UpdateProfileRequest.builder().name(name).build());
-        //GET
+
         softly.assertThat(getProfileName())
-                .as("Имя в профиле не должно измениться")
+                .as("Имя в профиле не должно измениться после невалидного запроса")
                 .isEqualTo(nameBefore);
     }
 }
-*/
