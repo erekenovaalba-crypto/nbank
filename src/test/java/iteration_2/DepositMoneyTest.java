@@ -15,6 +15,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import requests.AccountTransactionsRequester;
+import requests.GetProfileRequester;
 import requests.skelethon.Endpoint;
 import requests.skelethon.requesters.CrudRequester;
 import requests.steps.AdminSteps;
@@ -45,7 +46,7 @@ public class DepositMoneyTest extends BaseTest {
     }
 
     private CreateAccountResponse getAccount(long id) {
-        CustomerProfile profile = new requests.GetProfileRequester(
+        CustomerProfile profile = new GetProfileRequester(
                 userSpec, ResponseSpecs.requestResponseOK())
                 .get().extract().as(CustomerProfile.class);
         return profile.getAccounts().stream()
@@ -162,8 +163,8 @@ public class DepositMoneyTest extends BaseTest {
         softly.assertThat(ownerProfileAfter.getAccounts())
                 .filteredOn(account -> account.getId() == ownerAccount.getId())
                 .singleElement()
-                .extracting(CreateAccountResponse::getBalance)
-                .isEqualTo(ownerBalanceBefore);
+                .satisfies(account -> softly.assertThat(account.getBalance())
+                        .isEqualByComparingTo(ownerBalanceBefore));
     }
 
     @Test
