@@ -184,6 +184,9 @@ public class TransferMoneyTest extends BaseTest {
         transferExpectingError(senderId, receiverId, amount, ErrorMessage.INVALID_TRANSFER);
         assertNoTransfer();
         softly.assertThat(getBalance(senderId)).isCloseTo(balance, within(BALANCE_DELTA));
+        softly.assertThat(getBalance(receiverId))
+                .as("GET профиля подтверждает, что баланс получателя не изменился")
+                .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
     }
 
     @Test
@@ -197,5 +200,8 @@ public class TransferMoneyTest extends BaseTest {
                 amount, ErrorMessage.INVALID_TRANSFER);
         assertNoTransfer();
         softly.assertThat(getBalance(senderId)).isCloseTo(balance, within(BALANCE_DELTA));
+        softly.assertThat(getBalance(receiverId))
+                .as("GET профиля подтверждает, что второй счёт не изменился")
+                .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
     }
 }
