@@ -1,6 +1,6 @@
 package generators;
 
-import com.github.curiousoddman.rgxgen.RgxGen;
+//import com.github.curiousoddman.rgxgen.RgxGen;
 import org.apache.commons.lang3.RandomStringUtils;
 
 import java.lang.reflect.Field;
@@ -44,8 +44,8 @@ public final class RandomModelGenerator {
     private static Object generateFieldValue(Field field, int depth) {
         GeneratingRule rule = field.getAnnotation(GeneratingRule.class);
         if (rule != null) {
-            String generated = RgxGen.parse(rule.regex()).generate();
-            return convert(generated, field);
+          //  String generated = RgxGen.parse(rule.regex()).generate();
+          //  return convert(generated, field);
         }
         return randomValue(field.getType(), field.getGenericType(), depth);
     }

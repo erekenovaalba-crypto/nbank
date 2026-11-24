@@ -15,7 +15,7 @@ public final class ModelComparator {
     private ModelComparator() {}
 
     public static List<String> compare(Object request, Object response) {
-        Rule rule = ModelComparisonConfig.getRule(request.getClass(), response.getClass());
+        Rule rule = comparison.ModelComparisonConfig.getRule(request.getClass(), response.getClass());
         List<String> mismatches = new ArrayList<>();
 
         for (FieldMapping mapping : rule.fields()) {

@@ -1,3 +1,4 @@
+
 package comparison;
 
 import org.assertj.core.api.AbstractAssert;
@@ -25,7 +26,7 @@ public class ModelAssertions extends AbstractAssert<ModelAssertions, Object> {
             failWithMessage("Ответ не должен быть null");
         }
 
-        List<String> mismatches = ModelComparator.compare(actual, response);
+        List<String> mismatches = comparison.ModelComparator.compare(actual, response);
         if (!mismatches.isEmpty()) {
             // "%s", чтобы символы % в значениях не принимались за формат
             failWithMessage("%s", "Модели не совпадают:\n" + String.join("\n", mismatches));
