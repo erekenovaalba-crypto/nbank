@@ -2,6 +2,8 @@ package requests.skelethon.interfaces;
 import models.BaseModel;
 
 public interface CrudEndpointInterface {
+    // POST без тела, например создание счёта
+    Object post();
     Object post(BaseModel model);
     // GET без параметров: список (пользователи) или единственный ресурс (профиль)
     Object get();

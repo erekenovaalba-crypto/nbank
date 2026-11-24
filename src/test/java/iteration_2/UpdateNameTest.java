@@ -1,6 +1,6 @@
 package iteration_2;
 
-import comparison.ModelAssertions;
+import models.comparison.ModelAssertions;
 import generators.NameGenerator;
 import generators.RandomModelGenerator;
 import iteration_1.BaseTest;
@@ -40,9 +40,9 @@ public class UpdateNameTest extends BaseTest {
         UpdateProfileResponse response = UserSteps.updateName(user, request);
 
         softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.PROFILE_UPDATED.getMessage());
-        softly.assertThat(response.getCustomer().getName()).isEqualTo(request.getName());
+        ModelAssertions.assertThatModels(request, response).match();
 
-        // имя действительно сохранилось в профиле: проверяем фактическое состояние через GET
+        //  GET
         ModelAssertions.assertThatModels(request, UserSteps.getProfile(user)).match();
     }
 
@@ -62,7 +62,7 @@ public class UpdateNameTest extends BaseTest {
 
         UserSteps.updateNameExpectingError(user, request,
                 ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME));
-
+        //GET
         softly.assertThat(UserSteps.getProfile(user).getName())
                 .as("Имя в профиле не должно измениться")
                 .isEqualTo(nameBefore);

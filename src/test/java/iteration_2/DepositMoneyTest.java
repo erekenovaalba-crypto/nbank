@@ -1,6 +1,6 @@
 package iteration_2;
 
-import comparison.ModelAssertions;
+import models.comparison.ModelAssertions;
 import generators.AmountGenerator;
 import generators.RandomData;
 import iteration_1.BaseTest;
@@ -18,7 +18,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
 
 public class DepositMoneyTest extends BaseTest {
 
@@ -36,6 +35,16 @@ public class DepositMoneyTest extends BaseTest {
         return DepositRequest.builder().id(id).balance(amount).build();
     }
 
+    // новый счёт после неудачной операции должен остаться пустым: ни транзакций, ни денег
+    private void assertAccountIsUntouched(CreateUserRequest owner, long id) {
+        softly.assertThat(UserSteps.getTransactions(owner, id))
+                .as("Транзакций быть не должно")
+                .isEmpty();
+        softly.assertThat(UserSteps.getBalance(owner, id))
+                .as("Баланс не должен измениться")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
     // Позитивный кейс: граничные суммы и случайная сумма из допустимого диапазона
     public static Stream<Arguments> validDepositAmounts() {
         return Stream.of(
@@ -49,27 +58,22 @@ public class DepositMoneyTest extends BaseTest {
     @ParameterizedTest
     public void userCanDepositMoneyIntoOwnAccount(BigDecimal amount) {
         DepositRequest request = depositRequest(accountId, amount);
-
         CreateAccountResponse response = UserSteps.deposit(user, request);
-
         ModelAssertions.assertThatModels(request, response).match();
 
-        // счёт новый, значит транзакция должна быть ровно одна
-        assertThat(response.getTransactions()).hasSize(1);
-        TransactionData deposit = response.getTransactions().get(0);
+        // проверка, что одна транзакция
+        TransactionData deposit = UserSteps.singleTransaction(response.getTransactions(), TransactionType.DEPOSIT);
         softly.assertThat(deposit.getId()).isNotNull().isPositive();
         softly.assertThat(deposit.getType()).isEqualTo(TransactionType.DEPOSIT.name());
-        softly.assertThat(deposit.getAmount()).isEqualByComparingTo(amount);
-        softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) accountId);
+        ModelAssertions.assertThatModels(request, deposit).match();
         softly.assertThat(deposit.getTimestamp()).isNotNull();
 
-        // фактическое состояние через GET: баланс счёта в профиле изменился
+        // GET: баланс счёта в профиле изменился
         ModelAssertions.assertThatModels(request, UserSteps.getAccount(user, accountId)).match();
 
-        // и транзакция сохранилась в истории счёта
+        // транзакция сохранилась в истории счёта
         List<TransactionData> stored = UserSteps.getTransactions(user, accountId);
-        assertThat(stored).hasSize(1);
-        softly.assertThat(stored.get(0))
+        softly.assertThat(UserSteps.singleTransaction(stored, TransactionType.DEPOSIT))
                 .usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                 .isEqualTo(deposit);
@@ -94,13 +98,8 @@ public class DepositMoneyTest extends BaseTest {
         UserSteps.depositExpectingError(user, depositRequest(accountId, amount),
                 ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage));
 
-        // статус 400 ещё не значит, что деньги не зачислены: проверяем фактическое состояние через GET
-        softly.assertThat(UserSteps.getTransactions(user, accountId))
-                .as("После неудачного депозита транзакций быть не должно")
-                .isEmpty();
-        softly.assertThat(UserSteps.getBalance(user, accountId))
-                .as("Баланс не должен измениться")
-                .isEqualByComparingTo(BigDecimal.ZERO);
+        // GET
+        assertAccountIsUntouched(user, accountId);
     }
 
     // Негативный кейс: депозит на чужой счёт
@@ -113,13 +112,12 @@ public class DepositMoneyTest extends BaseTest {
                 depositRequest(ownerAccountId, AmountGenerator.validDepositAmount()),
                 ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT));
 
-        // историю чужого счёта тоже читать нельзя
+        // историю чужого счёта читать нельзя
         UserSteps.getTransactionsExpectingError(user, ownerAccountId,
                 ResponseSpecs.requestResponseForbidden(ErrorMessage.NO_PERMISSION_TO_ACCOUNT));
 
-        // а у владельца счёта ничего не изменилось
-        softly.assertThat(UserSteps.getTransactions(owner, ownerAccountId)).isEmpty();
-        softly.assertThat(UserSteps.getBalance(owner, ownerAccountId)).isEqualByComparingTo(BigDecimal.ZERO);
+        // у владельца счёта ничего не изменилось
+        assertAccountIsUntouched(owner, ownerAccountId);
     }
 
     // Негативный кейс: депозит на несуществующий счёт
@@ -129,8 +127,7 @@ public class DepositMoneyTest extends BaseTest {
                 depositRequest(RandomData.getNonExistentAccountId(), AmountGenerator.validDepositAmount()),
                 ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT));
 
-        // свои счета остались пустыми
-        softly.assertThat(UserSteps.getTransactions(user, accountId)).isEmpty();
-        softly.assertThat(UserSteps.getBalance(user, accountId)).isEqualByComparingTo(BigDecimal.ZERO);
+        // GET свои счета остались пустыми
+        assertAccountIsUntouched(user, accountId);
     }
 }

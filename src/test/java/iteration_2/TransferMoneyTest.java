@@ -1,6 +1,7 @@
 package iteration_2;
 
-import comparison.ModelAssertions;
+import models.comparison.ModelAssertions;
+import models.comparison.RuleVariants;
 import generators.AmountGenerator;
 import generators.RandomData;
 import iteration_1.BaseTest;
@@ -24,8 +25,6 @@ public class TransferMoneyTest extends BaseTest {
     // на счёте больше лимита перевода, чтобы срабатывала проверка суммы, а не нехватка средств
     private static final BigDecimal BALANCE_ABOVE_TRANSFER_LIMIT =
             AmountGenerator.MAX_TRANSFER.add(AmountGenerator.MAX_DEPOSIT);
-    // сервер хранит баланс как double (например 24349.699999999983), поэтому сравниваем с допуском
-    private static final BigDecimal BALANCE_DELTA = new BigDecimal("0.005");
 
     private CreateUserRequest user;
     private long senderId;
@@ -47,7 +46,14 @@ public class TransferMoneyTest extends BaseTest {
                 .build();
     }
 
-    private void assertNothingWasTransferred() {
+    // после неудачного перевода: нет транзакций, баланс отправителя прежний, у получателя ноль
+    private void assertNothingWasTransferred(BigDecimal senderBalance) {
+        softly.assertThat(UserSteps.getBalance(user, senderId))
+                .as("Баланс отправителя не должен измениться")
+                .isCloseTo(senderBalance, within(AmountGenerator.BALANCE_DELTA));
+        softly.assertThat(UserSteps.getBalance(user, receiverId))
+                .as("Баланс получателя не должен измениться")
+                .isCloseTo(BigDecimal.ZERO, within(AmountGenerator.BALANCE_DELTA));
         softly.assertThat(UserSteps.getTransactions(user, senderId))
                 .extracting(TransactionData::getType)
                 .as("У отправителя не должно быть " + TransactionType.TRANSFER_OUT)
@@ -81,23 +87,21 @@ public class TransferMoneyTest extends BaseTest {
         // фактическое состояние через GET: балансы обоих счетов и транзакции
         softly.assertThat(UserSteps.getBalance(user, senderId))
                 .as("Баланс отправителя")
-                .isCloseTo(senderBefore.subtract(amount), within(BALANCE_DELTA));
+                .isCloseTo(senderBefore.subtract(amount), within(AmountGenerator.BALANCE_DELTA));
         softly.assertThat(UserSteps.getBalance(user, receiverId))
                 .as("Баланс получателя")
-                .isCloseTo(receiverBefore.add(amount), within(BALANCE_DELTA));
+                .isCloseTo(receiverBefore.add(amount), within(AmountGenerator.BALANCE_DELTA));
 
         TransactionData out = UserSteps.singleTransaction(
                 UserSteps.getTransactions(user, senderId), TransactionType.TRANSFER_OUT);
         softly.assertThat(out.getId()).isNotNull().isPositive();
-        softly.assertThat(out.getAmount()).isEqualByComparingTo(amount);
-        softly.assertThat(out.getRelatedAccountId()).isEqualTo((int) receiverId);
+        ModelAssertions.assertThatModels(request, out).usingRule(RuleVariants.TRANSFER_OUT).match();
         softly.assertThat(out.getTimestamp()).isNotNull();
 
         TransactionData in = UserSteps.singleTransaction(
                 UserSteps.getTransactions(user, receiverId), TransactionType.TRANSFER_IN);
         softly.assertThat(in.getId()).isNotNull().isPositive();
-        softly.assertThat(in.getAmount()).isEqualByComparingTo(amount);
-        softly.assertThat(in.getRelatedAccountId()).isEqualTo((int) senderId);
+        ModelAssertions.assertThatModels(request, in).usingRule(RuleVariants.TRANSFER_IN).match();
         softly.assertThat(in.getTimestamp()).isNotNull();
     }
 
@@ -119,21 +123,19 @@ public class TransferMoneyTest extends BaseTest {
 
         softly.assertThat(UserSteps.getBalance(user, senderId))
                 .as("Баланс отправителя")
-                .isCloseTo(senderBefore.subtract(amount), within(BALANCE_DELTA));
+                .isCloseTo(senderBefore.subtract(amount), within(AmountGenerator.BALANCE_DELTA));
         softly.assertThat(UserSteps.getBalance(otherUser, otherAccountId))
                 .as("Баланс получателя (другого пользователя)")
-                .isCloseTo(otherBefore.add(amount), within(BALANCE_DELTA));
+                .isCloseTo(otherBefore.add(amount), within(AmountGenerator.BALANCE_DELTA));
 
         TransactionData out = UserSteps.singleTransaction(
                 UserSteps.getTransactions(user, senderId), TransactionType.TRANSFER_OUT);
-        softly.assertThat(out.getAmount()).isEqualByComparingTo(amount);
-        softly.assertThat(out.getRelatedAccountId()).isEqualTo((int) otherAccountId);
+        ModelAssertions.assertThatModels(request, out).usingRule(RuleVariants.TRANSFER_OUT).match();
 
-        // получатель видит входящую транзакцию в своей истории
+        // GET получатель видит входящую транзакцию в своей истории
         TransactionData in = UserSteps.singleTransaction(
                 UserSteps.getTransactions(otherUser, otherAccountId), TransactionType.TRANSFER_IN);
-        softly.assertThat(in.getAmount()).isEqualByComparingTo(amount);
-        softly.assertThat(in.getRelatedAccountId()).isEqualTo((int) senderId);
+        ModelAssertions.assertThatModels(request, in).usingRule(RuleVariants.TRANSFER_IN).match();
     }
 
     // Негативный кейс: граничные значения (лимит + 0.01 и ноль) и случайные суммы вне диапазона
@@ -156,14 +158,8 @@ public class TransferMoneyTest extends BaseTest {
         UserSteps.transferExpectingError(user, transferRequest(senderId, receiverId, amount),
                 ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage));
 
-        // статус 400 ещё не значит, что деньги не ушли: проверяем фактическое состояние через GET
-        assertNothingWasTransferred();
-        softly.assertThat(UserSteps.getBalance(user, senderId))
-                .as("Баланс отправителя не должен измениться")
-                .isCloseTo(BALANCE_ABOVE_TRANSFER_LIMIT, within(BALANCE_DELTA));
-        softly.assertThat(UserSteps.getBalance(user, receiverId))
-                .as("Баланс получателя не должен измениться")
-                .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
+        //  GET
+        assertNothingWasTransferred(BALANCE_ABOVE_TRANSFER_LIMIT);
     }
 
     // Негативный кейс: перевод больше, чем есть на счёте
@@ -179,14 +175,8 @@ public class TransferMoneyTest extends BaseTest {
 
         UserSteps.transferExpectingError(user, transferRequest(senderId, receiverId, amount),
                 ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_TRANSFER));
-
-        assertNothingWasTransferred();
-        softly.assertThat(UserSteps.getBalance(user, senderId))
-                .as("Баланс отправителя не должен измениться")
-                .isCloseTo(balance, within(BALANCE_DELTA));
-        softly.assertThat(UserSteps.getBalance(user, receiverId))
-                .as("Баланс получателя не должен измениться")
-                .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
+        //GET
+        assertNothingWasTransferred(balance);
     }
 
     // Негативный кейс: перевод на несуществующий счёт
@@ -200,10 +190,7 @@ public class TransferMoneyTest extends BaseTest {
         UserSteps.transferExpectingError(user,
                 transferRequest(senderId, RandomData.getNonExistentAccountId(), amount),
                 ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_TRANSFER));
-
-        assertNothingWasTransferred();
-        softly.assertThat(UserSteps.getBalance(user, senderId))
-                .as("Баланс отправителя не должен измениться")
-                .isCloseTo(balance, within(BALANCE_DELTA));
+        //GET
+        assertNothingWasTransferred(balance);
     }
 }

@@ -1,6 +1,6 @@
 package generators;
 
-//import com.github.curiousoddman.rgxgen.RgxGen;
+import com.github.curiousoddman.rgxgen.RgxGen;
 import org.apache.commons.lang3.RandomStringUtils;
 
 import java.lang.reflect.Field;
@@ -18,6 +18,12 @@ public final class RandomModelGenerator {
     private static final int MAX_DEPTH = 5;
     private static final int STRING_LENGTH = 10;
     private static final int MAX_LIST_SIZE = 3;
+    private static final int MIN_NUMBER = 1;
+    private static final int MAX_INT = 1000;
+    private static final int MAX_CENTS = 100_000;
+    private static final double CENTS_IN_UNIT = 100.0;
+    private static final float CENTS_IN_UNIT_FLOAT = 100.0f;
+    private static final int MIN_LIST_SIZE = 1;
 
     private RandomModelGenerator() {}
 
@@ -44,8 +50,8 @@ public final class RandomModelGenerator {
     private static Object generateFieldValue(Field field, int depth) {
         GeneratingRule rule = field.getAnnotation(GeneratingRule.class);
         if (rule != null) {
-          //  String generated = RgxGen.parse(rule.regex()).generate();
-          //  return convert(generated, field);
+            String generated = RgxGen.parse(rule.regex()).generate();
+            return convert(generated, field);
         }
         return randomValue(field.getType(), field.getGenericType(), depth);
     }
@@ -58,19 +64,19 @@ public final class RandomModelGenerator {
             return RandomStringUtils.randomAlphabetic(STRING_LENGTH);
         }
         if (type == int.class || type == Integer.class) {
-            return random.nextInt(1, 1000);
+            return random.nextInt(MIN_NUMBER, MAX_INT);
         }
         if (type == long.class || type == Long.class) {
-            return random.nextLong(1, 1000);
+            return random.nextLong(MIN_NUMBER, MAX_INT);
         }
         if (type == double.class || type == Double.class) {
-            return random.nextLong(1, 100_000) / 100.0;
+            return random.nextLong(MIN_NUMBER, MAX_CENTS) / CENTS_IN_UNIT;
         }
         if (type == float.class || type == Float.class) {
-            return random.nextInt(1, 100_000) / 100.0f;
+            return random.nextInt(MIN_NUMBER, MAX_CENTS) / CENTS_IN_UNIT_FLOAT;
         }
         if (type == BigDecimal.class) {
-            return BigDecimal.valueOf(random.nextLong(1, 100_000), 2);
+            return BigDecimal.valueOf(random.nextLong(MIN_NUMBER, MAX_CENTS), AmountGenerator.AMOUNT_SCALE);
         }
         if (type == boolean.class || type == Boolean.class) {
             return random.nextBoolean();
@@ -94,7 +100,7 @@ public final class RandomModelGenerator {
                 || !(parameterizedType.getActualTypeArguments()[0] instanceof Class<?> elementType)) {
             throw new IllegalArgumentException("Не удалось определить тип элементов списка: " + genericType);
         }
-        int size = ThreadLocalRandom.current().nextInt(1, MAX_LIST_SIZE + 1);
+        int size = ThreadLocalRandom.current().nextInt(MIN_LIST_SIZE, MAX_LIST_SIZE + 1);
         List<Object> list = new ArrayList<>();
         for (int i = 0; i < size; i++) {
             list.add(randomValue(elementType, elementType, depth));

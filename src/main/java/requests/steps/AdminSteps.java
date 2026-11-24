@@ -2,8 +2,10 @@ package requests.steps;
 
 import generators.RandomModelGenerator;
 import io.restassured.specification.RequestSpecification;
-import io.restassured.specification.ResponseSpecification;
+import io.restassured.common.mapper.TypeRef;
 import models.CreateUserRequest;
+import models.ErrorMessage;
+import models.JsonField;
 import models.CreateUserResponse;
 import models.UserRole;
 import requests.skelethon.Endpoint;
@@ -14,14 +16,15 @@ import spec.ResponseSpecs;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
-// Общие шаги от имени админа.
-// В тесте достаточно написать: CreateUserRequest userRequest = AdminSteps.createUser();
+import static org.assertj.core.api.Assertions.assertThat;
+
+
 public class AdminSteps {
 
     // создаёт пользователя (роль USER) со случайными данными и возвращает запрос, по которому он создан:
-    // по нему можно авторизоваться и вызывать шаги UserSteps
     public static CreateUserRequest createUser() {
         CreateUserRequest request = RandomModelGenerator.generate(CreateUserRequest.class);
         // шаги UserSteps работают от имени обычного пользователя, поэтому роль всегда USER
@@ -39,10 +42,16 @@ public class AdminSteps {
                 .post(request);
     }
 
-    // создание, которое должно завершиться ошибкой: ожидаемый ответ задаётся спецификацией
-    public static void createUserExpectingError(CreateUserRequest request, ResponseSpecification responseSpec) {
-        new CrudRequester(RequestSpecs.adminSpec(), Endpoint.ADMIN_USER, responseSpec)
-                .post(request);
+    // создание, которое должно вернуть 400 с ошибкой по полю.
+    public static void createUserExpectingFieldError(CreateUserRequest request, JsonField field,
+                                                     ErrorMessage message) {
+        Map<String, List<String>> errors = new CrudRequester(
+                RequestSpecs.adminSpec(), Endpoint.ADMIN_USER, ResponseSpecs.requestResponseBadRequest())
+                .post(request)
+                .extract().as(new TypeRef<Map<String, List<String>>>() {});
+        assertThat(errors.get(field.getName()))
+                .as("Ошибки по полю " + field.getName())
+                .contains(message.getMessage());
     }
 
     public static List<CreateUserResponse> getUsers() {

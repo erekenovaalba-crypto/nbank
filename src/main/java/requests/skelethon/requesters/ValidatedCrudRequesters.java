@@ -15,8 +15,9 @@ public class ValidatedCrudRequesters<M extends BaseModel> extends HttpRequest im
         this.crudRequester = new CrudRequester(requestSpecification, endpoint, responseSpecification);
     }
 
+    @Override
     public M post() {
-        return post(null);
+        return toModel(crudRequester.post());
     }
 
     @Override

@@ -11,9 +11,10 @@ public enum Endpoint {
     LOGIN("/auth/login" , LoginUserRequest.class, LoginUserResponse.class),
     ADMIN_USER("/admin/users", CreateUserRequest.class, CreateUserResponse.class),
     CREATE_ACCOUNT("/accounts", BaseModel.class, CreateAccountResponse.class ),
-    DEPOSIT("/accounts/deposit", DepositRequest.class, BaseModel.class),
+    // ответ депозита это счёт с обновлённым балансом и транзакциями
+    DEPOSIT("/accounts/deposit", DepositRequest.class, CreateAccountResponse.class),
     TRANSFER("/accounts/transfer", TransferRequest.class, TransferResponse.class),
-    ACCOUNT_TRANSACTIONS("/accounts/{accountId}/transactions", BaseModel.class, BaseModel.class),
+    ACCOUNT_TRANSACTIONS("/accounts/{accountId}/transactions", BaseModel.class, TransactionData.class),
     CUSTOMER_PROFILE("/customer/profile", UpdateProfileRequest.class, UpdateProfileResponse.class);
     private  final String url;
     private  final Class<? extends BaseModel> requestModel;

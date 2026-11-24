@@ -3,7 +3,6 @@ package spec;
 import io.restassured.builder.ResponseSpecBuilder;
 import io.restassured.specification.ResponseSpecification;
 import models.ErrorMessage;
-import models.JsonField;
 import org.apache.http.HttpStatus;
 import org.hamcrest.Matchers;
 
@@ -22,14 +21,7 @@ public class ResponseSpecs {
                 .expectStatusCode(HttpStatus.SC_OK)
                 .build();
     }
-    // ошибка в JSON: ключ поля и список сообщений
-    public static ResponseSpecification requestResponseBadRequest(JsonField errorKey, ErrorMessage errorMessage){
-        return  defaultResponseBuilder()
-                .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
-                .expectBody(errorKey.getName(), Matchers.hasItem(errorMessage.getMessage()))
-                .build();
-    }
-    // когда текст ошибки неизвестен или не важен, проверяем только статус-код
+    // только статус-код; тело ошибки читается в шаге через десериализацию, без JSONPath
     public static ResponseSpecification requestResponseBadRequest(){
         return  defaultResponseBuilder()
                 .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
@@ -37,14 +29,14 @@ public class ResponseSpecs {
     }
     // ошибка приходит обычным текстом, а не JSON, поэтому сравниваем всё тело
     public static ResponseSpecification requestResponseBadRequestWithMessage(ErrorMessage errorMessage){
-        return  defaultResponseBuilder()
-                .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
-                .expectBody(Matchers.equalTo(errorMessage.getMessage()))
-                .build();
+        return plainTextError(HttpStatus.SC_BAD_REQUEST, errorMessage);
     }
     public static ResponseSpecification requestResponseForbidden(ErrorMessage errorMessage){
+        return plainTextError(HttpStatus.SC_FORBIDDEN, errorMessage);
+    }
+    private static ResponseSpecification plainTextError(int statusCode, ErrorMessage errorMessage){
         return  defaultResponseBuilder()
-                .expectStatusCode(HttpStatus.SC_FORBIDDEN)
+                .expectStatusCode(statusCode)
                 .expectBody(Matchers.equalTo(errorMessage.getMessage()))
                 .build();
     }

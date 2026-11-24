@@ -1,4 +1,4 @@
-package comparison;
+package models.comparison;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,18 +14,24 @@ import java.util.Properties;
 // Класс 1: читает правила сравнения из model-comparison.properties.
 //
 // Формат строки:
-//   ИмяКлассаЗапроса=ИмяКлассаОтвета:поле=поле,поле=поле,поле!=поле
+//   КлассЗапроса=КлассОтвета:поле=поле,поле;ДругойКлассОтвета:поле=поле
 //
-// Пример:
-//   CreateUserRequest=CreateUserResponse:username=username,role=role,password!=password
-//
-//   поле=поле   значения должны совпасть (имена полей в запросе и ответе могут отличаться)
-//   поле        то же самое, если поле называется одинаково в обоих классах
-//   поле!=поле  значения должны отличаться (например, пароль в ответе не должен быть открытым)
+//   поле=поле       значения должны совпасть (имена в запросе и ответе могут отличаться)
+//   поле            то же самое, если поле называется одинаково
+//   поле!=поле      значения должны отличаться (например, пароль в ответе не должен быть открытым)
+//   customer.name   вложенное поле через точку
+//   Класс#вариант   несколько наборов правил для одной пары классов,
+//                   выбирается так: assertThatModels(a, b).usingRule("вариант").match()
+//   ;               разделяет правила для разных классов ответа
 public final class ModelComparisonConfig {
     private static final String CONFIG_FILE = "model-comparison.properties";
     private static final String NOT_EQUAL = "!=";
     private static final String EQUAL = "=";
+    private static final String KEY_SEPARATOR = "->";
+    private static final String RESPONSE_SEPARATOR = ";";
+    private static final String FIELDS_SEPARATOR = ",";
+    private static final char CLASS_FIELDS_SEPARATOR = ':';
+    private static final String VARIANT_MARK = "#";
 
     // Одно сравнение полей: поле запроса -> поле ответа
     public record FieldMapping(String requestField, String responseField, boolean mustMatch) {}
@@ -33,22 +39,25 @@ public final class ModelComparisonConfig {
     // Правило для пары классов: запрос -> ответ
     public record Rule(String requestClass, String responseClass, List<FieldMapping> fields) {}
 
-    // ключ: простое имя класса запроса
+    // ключ: "КлассЗапроса->КлассОтвета" или "КлассЗапроса->КлассОтвета#вариант"
     private static final Map<String, Rule> RULES = load();
 
     private ModelComparisonConfig() {}
 
-    public static Rule getRule(Class<?> requestClass, Class<?> responseClass) {
-        Rule rule = RULES.get(requestClass.getSimpleName());
+    public static Rule getRule(Class<?> requestClass, Class<?> responseClass, String variant) {
+        String key = key(requestClass.getSimpleName(), responseClass.getSimpleName(), variant);
+        Rule rule = RULES.get(key);
         if (rule == null) {
-            throw new IllegalStateException("В " + CONFIG_FILE + " нет правила для класса "
-                    + requestClass.getSimpleName());
-        }
-        if (!rule.responseClass().equals(responseClass.getSimpleName())) {
-            throw new IllegalStateException("В " + CONFIG_FILE + " для " + requestClass.getSimpleName()
-                    + " указан ответ " + rule.responseClass() + ", а передан " + responseClass.getSimpleName());
+            throw new IllegalStateException("В " + CONFIG_FILE + " нет правила для " + key
+                    + ". Добавьте строку: " + requestClass.getSimpleName() + "=" + responseClass.getSimpleName()
+                    + (variant == null ? "" : VARIANT_MARK + variant) + ":поле=поле");
         }
         return rule;
+    }
+
+    private static String key(String requestClass, String responseClass, String variant) {
+        return requestClass + KEY_SEPARATOR + responseClass
+                + (variant == null || variant.isBlank() ? "" : VARIANT_MARK + variant);
     }
 
     private static Map<String, Rule> load() {
@@ -63,7 +72,14 @@ public final class ModelComparisonConfig {
             }
             Map<String, Rule> rules = new HashMap<>();
             for (String requestClass : properties.stringPropertyNames()) {
-                rules.put(requestClass.trim(), parseRule(requestClass.trim(), properties.getProperty(requestClass)));
+                for (String segment : properties.getProperty(requestClass).split(RESPONSE_SEPARATOR)) {
+                    if (segment.isBlank()) {
+                        continue;
+                    }
+                    Rule rule = parseRule(requestClass.trim(), segment.trim());
+                    // responseClass может содержать "#вариант"
+                    rules.put(requestClass.trim() + KEY_SEPARATOR + rule.responseClass(), rule);
+                }
             }
             return rules;
         } catch (IOException e) {
@@ -72,13 +88,13 @@ public final class ModelComparisonConfig {
     }
 
     private static Rule parseRule(String requestClass, String value) {
-        int colon = value.indexOf(':');
+        int colon = value.indexOf(CLASS_FIELDS_SEPARATOR);
         if (colon < 0) {
             throw new IllegalStateException("Неверный формат правила для " + requestClass
                     + ": ожидается ИмяОтвета:поле=поле,..., а указано " + value);
         }
         String responseClass = value.substring(0, colon).trim();
-        List<FieldMapping> fields = Arrays.stream(value.substring(colon + 1).split(","))
+        List<FieldMapping> fields = Arrays.stream(value.substring(colon + 1).split(FIELDS_SEPARATOR))
                 .map(String::trim)
                 .filter(token -> !token.isEmpty())
                 .map(ModelComparisonConfig::parseField)

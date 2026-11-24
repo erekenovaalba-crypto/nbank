@@ -8,18 +8,17 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class NameGenerator {
     private static final int MIN_WORD_LENGTH = 3;
     private static final int MAX_WORD_LENGTH = 10;
+    private static final String WORD_SEPARATOR = " ";
+    private static final int MIN_EXTRA_SPACES = 2;
+    private static final int MAX_EXTRA_SPACES = 6;
+    private static final int DIGIT_COUNT = 1;
     private static final String SYMBOLS = "!@#$%^&*()_+=<>?";
 
     private NameGenerator() {}
 
     // допустимое имя с заглавными буквами, например "Qwerty Asdfgh"
     public static String validName() {
-        return capitalizedWord() + " " + capitalizedWord();
-    }
-
-    // допустимое имя, написанное строчными буквами
-    public static String validNameLowerCase() {
-        return validName().toLowerCase();
+        return capitalizedWord() + WORD_SEPARATOR + capitalizedWord();
     }
 
     // недопустимое имя: одно слово
@@ -35,12 +34,12 @@ public final class NameGenerator {
 
     // недопустимое имя: два слова, в конце второго цифра
     public static String nameWithDigit() {
-        return validName() + RandomStringUtils.randomNumeric(1);
+        return validName() + RandomStringUtils.randomNumeric(DIGIT_COUNT);
     }
 
     // недопустимое имя: два слова, между ними несколько пробелов
     public static String nameWithExtraSpaces() {
-        String spaces = " ".repeat(ThreadLocalRandom.current().nextInt(2, 7));
+        String spaces = WORD_SEPARATOR.repeat(ThreadLocalRandom.current().nextInt(MIN_EXTRA_SPACES, MAX_EXTRA_SPACES + 1));
         return capitalizedWord() + spaces + capitalizedWord();
     }
 

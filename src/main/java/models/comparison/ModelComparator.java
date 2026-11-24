@@ -1,7 +1,7 @@
-package comparison;
+package models.comparison;
 
-import comparison.ModelComparisonConfig.FieldMapping;
-import comparison.ModelComparisonConfig.Rule;
+import models.comparison.ModelComparisonConfig.FieldMapping;
+import models.comparison.ModelComparisonConfig.Rule;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -12,10 +12,12 @@ import java.util.Objects;
 // Класс 2: сравнивает объекты запроса и ответа по полям и правилам из конфига.
 // Возвращает список расхождений, пустой список означает, что модели соответствуют правилам.
 public final class ModelComparator {
+    private static final String PATH_SEPARATOR = "\\.";
+
     private ModelComparator() {}
 
-    public static List<String> compare(Object request, Object response) {
-        Rule rule = comparison.ModelComparisonConfig.getRule(request.getClass(), response.getClass());
+    public static List<String> compare(Object request, Object response, String variant) {
+        Rule rule = ModelComparisonConfig.getRule(request.getClass(), response.getClass(), variant);
         List<String> mismatches = new ArrayList<>();
 
         for (FieldMapping mapping : rule.fields()) {
@@ -45,8 +47,20 @@ public final class ModelComparator {
         return Objects.equals(expected, actual);
     }
 
-    // читаем поле напрямую, без геттеров; ищем и в родительских классах
-    private static Object readField(Object object, String fieldName) {
+    // читаем поле напрямую, без геттеров; путь может быть вложенным: "customer.name"
+    private static Object readField(Object object, String path) {
+        Object current = object;
+        for (String name : path.split(PATH_SEPARATOR)) {
+            if (current == null) {
+                return null;
+            }
+            current = readSingleField(current, name);
+        }
+        return current;
+    }
+
+    // ищем поле и в родительских классах
+    private static Object readSingleField(Object object, String fieldName) {
         for (Class<?> type = object.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
             try {
                 Field field = type.getDeclaredField(fieldName);

@@ -1,6 +1,6 @@
 package iteration_1;
 
-import comparison.ModelAssertions;
+import models.comparison.ModelAssertions;
 import generators.RandomData;
 import generators.RandomModelGenerator;
 import models.*;
@@ -9,7 +9,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import requests.steps.AdminSteps;
-import spec.ResponseSpecs;
 
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -21,29 +20,21 @@ public class CreateUserTest extends BaseTest {
     @Test
     public void adminCanCreateUserWithCorrectDataTest() {
         CreateUserRequest createUserRequest = RandomModelGenerator.generate(CreateUserRequest.class);
-
         CreateUserResponse createUserResponse = AdminSteps.createUser(createUserRequest);
-
         ModelAssertions.assertThatModels(createUserRequest, createUserResponse).match();
-
-        // статус 201 ещё не значит, что пользователь сохранён: проверяем фактическое состояние через GET
+        // GET
         Optional<CreateUserResponse> savedUser = AdminSteps.findUser(createUserResponse.getId());
         assertThat(savedUser)
                 .as("Созданный пользователь должен быть в списке пользователей")
                 .isPresent();
         ModelAssertions.assertThatModels(createUserRequest, savedUser.get()).match();
     }
-
-
-    // граничные значения логина: из одних пробелов и короче минимальной длины
-    private static final String BLANK_USERNAME = "    ";
-    private static final String TOO_SHORT_USERNAME = "ad";
-
+    // граничные значения логина: из одних пробелов и короче минимальной длины (генерируются случайно)
     public static Stream<Arguments> userInvalidData() {
         return Stream.of(
-                Arguments.of(BLANK_USERNAME, RandomData.getPassword(), UserRole.USER.name(),
+                Arguments.of(RandomData.getBlankUsername(), RandomData.getPassword(), UserRole.USER.name(),
                         JsonField.USERNAME, ErrorMessage.USERNAME_BLANK),
-                Arguments.of(TOO_SHORT_USERNAME, RandomData.getPassword(), UserRole.USER.name(),
+                Arguments.of(RandomData.getTooShortUsername(), RandomData.getPassword(), UserRole.USER.name(),
                         JsonField.USERNAME, ErrorMessage.USERNAME_INVALID_LENGTH));
     }
 
@@ -57,10 +48,9 @@ public class CreateUserTest extends BaseTest {
                 .role(role)
                 .build();
 
-        AdminSteps.createUserExpectingError(createUserRequest,
-                ResponseSpecs.requestResponseBadRequest(errorKey, errorValue));
+        AdminSteps.createUserExpectingFieldError(createUserRequest, errorKey, errorValue);
 
-        // статус 400 ещё не значит, что пользователь не создан: проверяем фактическое состояние через GET
+        //  GET
         softly.assertThat(AdminSteps.getUsers())
                 .extracting(CreateUserResponse::getUsername)
                 .as("Пользователь с некорректными данными не должен быть создан")

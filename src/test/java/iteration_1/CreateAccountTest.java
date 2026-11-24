@@ -1,6 +1,6 @@
 package iteration_1;
 
-import comparison.ModelAssertions;
+import models.comparison.ModelAssertions;
 import models.*;
 import org.junit.jupiter.api.Test;
 import requests.steps.AdminSteps;
@@ -12,6 +12,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CreateAccountTest extends BaseTest {
+    private static final int NEW_USER_ACCOUNTS_COUNT = 1;
+
 
     @Test
     public void userCanCreateAccountTest() {
@@ -31,6 +33,6 @@ public class CreateAccountTest extends BaseTest {
                 .isPresent();
         ModelAssertions.assertThatModels(createdAccount, savedAccount.get()).match();
         softly.assertThat(profile.getAccounts()).as("У нового пользователя должен быть ровно один счёт")
-                .hasSize(1);
+                .hasSize(NEW_USER_ACCOUNTS_COUNT);
     }
 }

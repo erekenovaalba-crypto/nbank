@@ -17,43 +17,44 @@ public class CrudRequester extends HttpRequest implements CrudEndpointInterface 
     }
 
     // POST без тела, например создание счёта
+    @Override
     public ValidatableResponse post() {
-        return post(null);
+        return validate(request().post(endpoint.getUrl()));
     }
 
     @Override
     public ValidatableResponse post(BaseModel model) {
-        RequestSpecification request = given().spec(requestSpecification);
-        // пустое тело "" не отправляем: если модели нет, запрос уходит без тела
-        if (model != null) {
-            request = request.body(model);
-        }
-        return validate(request.post(endpoint.getUrl()));
+        return validate(request().body(model).post(endpoint.getUrl()));
     }
 
     @Override
     public ValidatableResponse get() {
-        return validate(given().spec(requestSpecification).get(endpoint.getUrl()));
+        return validate(request().get(endpoint.getUrl()));
     }
 
     @Override
     public ValidatableResponse get(long id) {
-        return validate(given().spec(requestSpecification).get(endpoint.getUrl(), id));
+        return validate(request().get(endpoint.getUrl(), id));
     }
 
     @Override
     public ValidatableResponse update(BaseModel model) {
-        return validate(given().spec(requestSpecification).body(model).put(endpoint.getUrl()));
+        return validate(request().body(model).put(endpoint.getUrl()));
     }
 
     @Override
     public ValidatableResponse update(long id, BaseModel model) {
-        return validate(given().spec(requestSpecification).body(model).put(endpoint.getUrl(), id));
+        return validate(request().body(model).put(endpoint.getUrl(), id));
     }
 
     @Override
     public ValidatableResponse delete(long id) {
-        return validate(given().spec(requestSpecification).delete(endpoint.getUrl(), id));
+        return validate(request().delete(endpoint.getUrl(), id));
+    }
+
+    // каждый запрос начинается с одной и той же спецификации
+    private RequestSpecification request() {
+        return given().spec(requestSpecification);
     }
 
     private ValidatableResponse validate(Response response) {
