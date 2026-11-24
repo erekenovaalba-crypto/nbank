@@ -1,82 +1,65 @@
 package iteration_1;
 
-import io.restassured.RestAssured;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
-import org.apache.http.HttpStatus;
-import org.hamcrest.Matcher;
+import generators.RandomData;
+import models.AuthConstants;
+import models.CreateUserRequest;
+import models.CustomerProfile;
+import models.LoginUserRequest;
+import models.UserRole;
 import org.hamcrest.Matchers;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import requests.AdminCreateUserRequester;
+import requests.AdminGetUsersRequester;
+import requests.GetProfileRequester;
+import requests.LoginUserRequester;
+import spec.RequestSpecs;
+import spec.ResponseSpecs;
 
-import java.util.List;
-
-import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class LoginUserTest {
-    @BeforeAll
-    public static void setupRestAssured(){
-        RestAssured.filters(
-                List.of(new RequestLoggingFilter(),
-                        new ResponseLoggingFilter()));
 
-    }
+    //войти админом
     @Test
     public void adminCanGenerateAuthTokenTest() {
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "admin",
-                          "password": "admin"
-                        }
-                        """)
-                .post("http://localhost:4111/api/v1/auth/login")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_OK)
-                .header("Authorization", "Basic YWRtaW46YWRtaW4=");
+        LoginUserRequest userRequest = LoginUserRequest.builder()
+                .username(AuthConstants.ADMIN_USERNAME)
+                .password(AuthConstants.ADMIN_PASSWORD)
+                .build();
+        String token = new LoginUserRequester(RequestSpecs.unauthSpec(), ResponseSpecs.requestResponseOK())
+                .post(userRequest)
+                .header(AuthConstants.HEADER_AUTHORIZATION, Matchers.notNullValue())
+                .extract().header(AuthConstants.HEADER_AUTHORIZATION);
 
+        // GET
+        new AdminGetUsersRequester(RequestSpecs.authWithToken(token), ResponseSpecs.requestResponseOK())
+                .get();
     }
-    //создание пользователя
-    @Test
-    public void adminCreateUserTest() {
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWRtaW46YWRtaW4=")
-                .body("""
-                        {
-                          "username": "albina490",
-                          "password": "verysTRongPassword33$",
-                          "role": "USER"
-                        }
-                        """)
-                .post("http://localhost:4111/api/v1/admin/users")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_CREATED);
 
-    }
+
     @Test
     public void userCanGenerateAuthTokenTest() {
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "albina1994",
-                          "password": "verysTRongPassword33$"
-                        }
-                        """)
-                .post("http://localhost:4111/api/v1/auth/login")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_OK)
-                .header("Authorization", Matchers.notNullValue());
+        CreateUserRequest userRequest = CreateUserRequest.builder()
+                .username(RandomData.getUsername())
+                .password(RandomData.getPassword())
+                .role(UserRole.USER.toString())
+                .build();
+        //создание пользователя
+        new AdminCreateUserRequester(RequestSpecs.adminSpec(),
+                ResponseSpecs.entityWasCreated())
+                .post(userRequest);
+        //логин
+        String token = new LoginUserRequester(RequestSpecs.unauthSpec(),
+                ResponseSpecs.requestResponseOK())
+                .post(LoginUserRequest.builder().username(userRequest.getUsername()).password(userRequest.getPassword()).build())
+                .header(AuthConstants.HEADER_AUTHORIZATION,Matchers.notNullValue())
+                .extract().header(AuthConstants.HEADER_AUTHORIZATION);
 
+        // GET
+        CustomerProfile profile = new GetProfileRequester(RequestSpecs.authWithToken(token), ResponseSpecs.requestResponseOK())
+                .get().extract().as(CustomerProfile.class);
+        assertThat(profile.getUsername())
+                .as("Профиль, полученный по токену, должен принадлежать залогиненному пользователю")
+                .isEqualTo(userRequest.getUsername());
     }
 }

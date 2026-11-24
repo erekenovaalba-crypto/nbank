@@ -1,183 +1,202 @@
 package iteration_2;
-import static org.junit.jupiter.api.Assertions.*;
-import io.restassured.RestAssured;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
-import org.apache.http.HttpStatus;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.BeforeAll;
+
+import models.ErrorMessage;
+import models.TransactionType;
+import generators.AmountGenerator;
+import generators.RandomData;
+import io.restassured.specification.RequestSpecification;
+import iteration_1.BaseTest;
+import models.CreateAccountResponse;
+import models.CreateUserRequest;
+import models.CustomerProfile;
+import models.DepositRequest;
+import models.TransactionData;
+import models.UserRole;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import requests.AccountTransactionsRequester;
+import requests.AdminCreateUserRequester;
+import requests.CreateAccountRequester;
+import requests.DepositRequester;
+import requests.GetProfileRequester;
+import spec.RequestSpecs;
+import spec.ResponseSpecs;
 
 import java.math.BigDecimal;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public class DepositMoneyTest {
-    private static final String URL = "http://localhost:4111/";
-    @BeforeAll
-    public static void setupRestAssured(){
-        RestAssured.filters(
-                List.of(new RequestLoggingFilter(),
-                        new ResponseLoggingFilter()));
+public class DepositMoneyTest extends BaseTest {
 
+    private RequestSpecification userSpec;
+    private long accountId;
+
+    // у каждого теста свой новый пользователь и свой пустой счёт
+    @BeforeEach
+    public void setupUser() {
+        userSpec = createUser();
+        accountId = createAccount(userSpec);
     }
+
+    // создаёт пользователя через админа и возвращает спецификацию для запросов от его имени
+    private RequestSpecification createUser() {
+        CreateUserRequest userRequest = CreateUserRequest.builder()
+                .username(RandomData.getUsername())
+                .password(RandomData.getPassword())
+                .role(UserRole.USER.toString())
+                .build();
+
+        new AdminCreateUserRequester(
+                RequestSpecs.adminSpec(),
+                ResponseSpecs.entityWasCreated())
+                .post(userRequest);
+
+        return RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword());
+    }
+
+    // создаёт счёт пользователю и возвращает его id
+    private long createAccount(RequestSpecification spec) {
+        return new CreateAccountRequester(spec, ResponseSpecs.entityWasCreated())
+                .post()
+                .extract().as(CreateAccountResponse.class)
+                .getId();
+    }
+//получение транзакций с помощью GET запроса
+    private List<TransactionData> getTransactions(RequestSpecification spec, long id) {
+        TransactionData[] transactions = new AccountTransactionsRequester(spec, ResponseSpecs.requestResponseOK())
+                .get(id)
+                .extract().as(TransactionData[].class);
+        return Arrays.asList(transactions);
+    }
+
+    // баланс счёта берём из профиля: GET /api/v1/customer/profile возвращает счета пользователя
+    private BigDecimal getBalance(RequestSpecification spec, long id) {
+        return new GetProfileRequester(spec, ResponseSpecs.requestResponseOK())
+                .get()
+                .extract().as(CustomerProfile.class)
+                .getAccounts()
+                .stream()
+                .filter(account -> account.getId() == id)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Счёт " + id + " не найден у пользователя"))
+                .getBalance();
+    }
+
+    // Позитивный кейс: граничные суммы и случайная сумма из допустимого диапазона
+    public static Stream<Arguments> validDepositAmounts() {
+        return Stream.of(
+                Arguments.of(AmountGenerator.MIN_AMOUNT),
+                Arguments.of(AmountGenerator.MAX_DEPOSIT.subtract(AmountGenerator.MIN_AMOUNT)),
+                Arguments.of(AmountGenerator.MAX_DEPOSIT),
+                Arguments.of(AmountGenerator.validDepositAmount()));
+    }
+
+    @MethodSource("validDepositAmounts")
+    @ParameterizedTest
+    public void userCanDepositMoneyIntoOwnAccount(BigDecimal amount) {
+        //POST
+        CreateAccountResponse response = new DepositRequester(
+                userSpec,
+                ResponseSpecs.requestResponseOK())
+                .post(DepositRequest.builder().id(accountId).balance(amount).build())
+                .extract().as(CreateAccountResponse.class);
+
+        softly.assertThat(response.getId()).isEqualTo(accountId);
+        softly.assertThat(response.getBalance()).as("Баланс в ответе депозита").isEqualByComparingTo(amount);
+
+        // GET счёт новый, значит транзакция должна быть ровно одна
+        assertThat(response.getTransactions()).hasSize(1);
+        TransactionData deposit = response.getTransactions().getFirst();
+
+        softly.assertThat(deposit.getId()).isNotNull().isPositive();
+        softly.assertThat(deposit.getType()).isEqualTo(TransactionType.DEPOSIT.name());
+        softly.assertThat(deposit.getAmount()).isEqualByComparingTo(amount);
+        softly.assertThat(deposit.getRelatedAccountId()).isEqualTo((int) accountId);
+        softly.assertThat(deposit.getTimestamp()).isNotNull();
+
+        // баланс счёта в профиле действительно изменился
+        softly.assertThat(getBalance(userSpec, accountId))
+                .as("Баланс счёта в профиле после депозита")
+                .isEqualByComparingTo(amount);
+
+        // GET то же самое должно быть в истории транзакций счёта
+        List<TransactionData> stored = getTransactions(userSpec, accountId);
+        assertThat(stored).hasSize(1);
+        softly.assertThat(stored.getFirst())
+                .usingRecursiveComparison()
+                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .isEqualTo(deposit);
+    }
+
+    // Негативный кейс: граничные значения (лимит + 0.01 и ноль)
+    // и случайные суммы вне допустимого диапазона
+    public static Stream<Arguments> invalidDepositAmounts() {
+        return Stream.of(
+                Arguments.of(AmountGenerator.MAX_DEPOSIT.add(AmountGenerator.MIN_AMOUNT),
+                        ErrorMessage.DEPOSIT_AMOUNT_EXCEEDS_LIMIT),
+                Arguments.of(BigDecimal.ZERO, ErrorMessage.DEPOSIT_AMOUNT_TOO_SMALL),
+                Arguments.of(AmountGenerator.amountAbove(AmountGenerator.MAX_DEPOSIT),
+                        ErrorMessage.DEPOSIT_AMOUNT_EXCEEDS_LIMIT),
+                Arguments.of(AmountGenerator.negativeAmount(AmountGenerator.MAX_DEPOSIT),
+                        ErrorMessage.DEPOSIT_AMOUNT_TOO_SMALL));
+    }
+
+    @MethodSource("invalidDepositAmounts")
+    @ParameterizedTest
+    public void userCannotDepositInvalidAmount(BigDecimal amount, ErrorMessage errorMessage) {
+        //POST
+        new DepositRequester(
+                userSpec,
+                ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage))
+                .post(DepositRequest.builder().id(accountId).balance(amount).build());
+        //GET
+        softly.assertThat(getTransactions(userSpec, accountId))
+                .as("После неудачного депозита транзакций быть не должно")
+                .isEmpty();
+    }
+
+    // Негативный кейс: депозит на чужой счёт
     @Test
-    public void userCanGenerateAuthTokenTest() {
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "albina490",
-                          "password": "verysTRongPassword33$"
-                        }
-                        """)
-                .post(URL+"api/v1/auth/login")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_OK)
-                .header("Authorization", Matchers.notNullValue());
+    public void userCannotDepositIntoForeignAccount() {
+        RequestSpecification ownerSpec = createUser();
+        long ownerAccountId = createAccount(ownerSpec);
 
+        new DepositRequester(
+                userSpec,
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
+                .post(DepositRequest.builder()
+                        .id(ownerAccountId)
+                        .balance(AmountGenerator.validDepositAmount())
+                        .build());
+        //GET
+        // историю чужого счёта тоже читать нельзя
+        new AccountTransactionsRequester(
+                userSpec,
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.NO_PERMISSION_TO_ACCOUNT))
+                .get(ownerAccountId);
+
+        // а у владельца счёта ничего не изменилось
+        softly.assertThat(getTransactions(ownerSpec, ownerAccountId)).isEmpty();
     }
-    //два раза запустить тест, чтобы создать два аккаунта
+
+    // Негативный кейс: депозит на несуществующий счёт
     @Test
-    public void userCanCreateAccountTest() {
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
-                .post(URL + "api/v1/accounts")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_CREATED)
-                .body("id", Matchers.notNullValue())
-                .body("accountNumber", Matchers.notNullValue())
-                .body("balance", Matchers.equalTo(0.0F));
+    public void userCannotDepositIntoNonExistentAccount() {
+        new DepositRequester(
+                userSpec,
+                ResponseSpecs.requestResponseForbidden(ErrorMessage.UNAUTHORIZED_ACCESS_TO_ACCOUNT))
+                .post(DepositRequest.builder()
+                        .id(RandomData.getNonExistentAccountId())
+                        .balance(AmountGenerator.validDepositAmount())
+                        .build());
 
-    }
-    // Позитивный кейс: Внесение денег на счет, граничные суммы: 4999, 5000,1
-    public static Stream<Arguments> userValidData(){
-        return Stream.of(
-                Arguments.of(1, new BigDecimal("5000.0")),
-                Arguments.of(1, new BigDecimal("4999.99")),
-                Arguments.of(1, new BigDecimal("0.01")));
-    }
-    @MethodSource("userValidData")
-    @ParameterizedTest
-    public void userDepositsMoneyIntoAccount(int id, BigDecimal balance) {
-
-        String requestBody = String.format(
-                """
-                        {
-                          "id": %d,
-                          "balance": %s
-                        }
-                        """, id, balance
-        );
-        List<TransactionData> transactionDataList =
-                given()
-                        .contentType(ContentType.JSON)
-                        .accept(ContentType.JSON)
-                        .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
-                        .body(requestBody)
-                        .post(URL +"api/v1/accounts/deposit")
-                        .then()
-                        .assertThat().statusCode(HttpStatus.SC_OK)
-                        .extract()
-                        .body()
-                        .jsonPath()
-                        .getList("transactions", TransactionData.class)
-                ;
-
-        TransactionData last = transactionDataList.stream()
-                .max(Comparator.comparing(TransactionData::getId))
-                .orElseThrow(() -> new AssertionError("Список транзакций пуст"));
-        assertAll("Последняя транзакция",
-                () -> assertNotNull(last.getId()),
-                () -> assertTrue(last.getId() > 0),
-                () -> assertEquals("DEPOSIT", last.getType()),
-                () -> assertNotNull(last.getAmount()),
-                () -> assertEquals(0, last.getAmount().compareTo(balance),
-                        "Ожидалась сумма " + balance + ", пришла " + last.getAmount()),
-                () -> assertNotNull(last.getTimestamp())
-        );
-
-
-    }
-    //Негативный кейс: Внесение денег на счет, сумма больше максимальной 5001
-    public static Stream<Arguments> userInvalidData(){
-        return Stream.of(
-                //Негативный кейс: Внесение денег на счет, сумма больше максимальной 5000.1
-                Arguments.of(1, new BigDecimal("5000.01"),"Deposit amount cannot exceed 5000"),
-                //внесение отрицательной суммы
-                Arguments.of(1, new BigDecimal("-1"), "Deposit amount must be at least 0.01"),
-                //внесение 0
-                Arguments.of(1, new BigDecimal("0"),"Deposit amount must be at least 0.01"));
-
-
-    }
-    @MethodSource("userInvalidData")
-    @ParameterizedTest
-    public void userDepositsMoneyIntoAccountWithIncorrectData(int id, BigDecimal balance, String responseError) {
-
-        String requestBody = String.format(
-                """
-                        {
-                          "id": %d,
-                          "balance": %s
-                        }
-                        """, id, balance
-        );
-
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
-                .body(requestBody)
-                .post(URL +"api/v1/accounts/deposit")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_BAD_REQUEST)
-                .body(Matchers.equalTo(responseError));
-
-
-    }
-    //внесение на не существующий счет
-    public static Stream<Arguments> userIncorrectAccount(){
-        return Stream.of(
-                Arguments.of(10, new BigDecimal("100.0"),"Unauthorized access to account"));
-    }
-    @MethodSource("userIncorrectAccount")
-    @ParameterizedTest
-    public void userDepositsMoneyIntoUnrealAccount(int id, BigDecimal balance, String responseError) {
-
-        String requestBody = String.format(
-                """
-                        {
-                          "id": %d,
-                          "balance": %s
-                        }
-                        """, id, balance
-        );
-
-        given()
-                .contentType(ContentType.JSON)
-                .accept(ContentType.JSON)
-                .header("Authorization", "Basic YWxiaW5hNDkwOnZlcnlzVFJvbmdQYXNzd29yZDMzJA==")
-                .body(requestBody)
-                .post(URL +"api/v1/accounts/deposit")
-                .then()
-                .assertThat()
-                .statusCode(HttpStatus.SC_FORBIDDEN)
-                .body(Matchers.equalTo(responseError));
-
-
+        // GET свои счета остались пустыми
+        softly.assertThat(getTransactions(userSpec, accountId)).isEmpty();
     }
 }
