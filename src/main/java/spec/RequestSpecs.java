@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 public class RequestSpecs {
-    private static Map<String, String> authHeaders = new HashMap<>(Map.of(AuthConstants.ADMIN_USERNAME, AuthConstants.ADMIN_AUTH_HEADER));
+    private static final Map<String, String> authHeaders = new HashMap<>(Map.of(AuthConstants.ADMIN_USERNAME, AuthConstants.ADMIN_AUTH_HEADER));
 
     private RequestSpecs(){}
     private static RequestSpecBuilder defaultRequestBuilder(){
