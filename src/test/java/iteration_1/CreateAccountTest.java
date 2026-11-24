@@ -1,24 +1,36 @@
 package iteration_1;
 
-import generators.RandomData;
-import generators.RandomModelGenerator;
+import comparison.ModelAssertions;
 import models.*;
 import org.junit.jupiter.api.Test;
-import requests.skelethon.Endpoint;
-import requests.skelethon.requesters.CrudRequester;
-import requests.skelethon.requesters.ValidatedCrudRequesters;
 import requests.steps.AdminSteps;
-import spec.RequestSpecs;
-import spec.ResponseSpecs;
+import requests.steps.UserSteps;
 
-public class CreateAccountTest extends BaseTest{
-   @Test
-    public  void userCanCreateAccountTest(){
-       CreateUserRequest userRequest = AdminSteps.createUser();
-      new CrudRequester(RequestSpecs.authAsUser(userRequest.getUsername(),userRequest.getPassword()),
-              Endpoint.CREATE_ACCOUNT,
-              ResponseSpecs.entityWasCreated())
-              .post(null);
+import java.math.BigDecimal;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+public class CreateAccountTest extends BaseTest {
+
+    @Test
+    public void userCanCreateAccountTest() {
+        CreateUserRequest userRequest = AdminSteps.createUser();
+        CreateAccountResponse createdAccount = UserSteps.createAccount(userRequest);
+
+        softly.assertThat(createdAccount.getId()).as("Проверка, что id положительный").isPositive();
+        softly.assertThat(createdAccount.getAccountNumber()).as("Проверка, что не null").isNotNull();
+        softly.assertThat(createdAccount.getBalance()).as("Проверка, что баланс равен 0")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+
+        // GET профиля
+        CustomerProfile profile = UserSteps.getProfile(userRequest);
+        Optional<CreateAccountResponse> savedAccount = UserSteps.findAccount(profile, createdAccount.getId());
+        assertThat(savedAccount)
+                .as("Созданный счёт должен быть в профиле пользователя")
+                .isPresent();
+        ModelAssertions.assertThatModels(createdAccount, savedAccount.get()).match();
+        softly.assertThat(profile.getAccounts()).as("У нового пользователя должен быть ровно один счёт")
+                .hasSize(1);
     }
-
 }

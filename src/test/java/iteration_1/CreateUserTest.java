@@ -1,5 +1,6 @@
 package iteration_1;
 
+import comparison.ModelAssertions;
 import generators.RandomData;
 import generators.RandomModelGenerator;
 import models.*;
@@ -7,29 +8,30 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import requests.skelethon.Endpoint;
-import requests.skelethon.requesters.CrudRequester;
-import requests.skelethon.requesters.ValidatedCrudRequesters;
-import spec.RequestSpecs;
+import requests.steps.AdminSteps;
 import spec.ResponseSpecs;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class CreateUserTest extends BaseTest {
 
     @Test
     public void adminCanCreateUserWithCorrectDataTest() {
-        CreateUserRequest userRequest =
-                RandomModelGenerator.generate(CreateUserRequest.class);
-        CreateUserResponse userResponse = new ValidatedCrudRequesters<CreateUserResponse>
-                (RequestSpecs.adminSpec(),
-                        Endpoint.ADMIN_USER,
-                        ResponseSpecs.
-                                entityWasCreated())
-                .post(userRequest);
-    comparison.ModelAssertions.assertThatModels(userRequest, userResponse).match();
+        CreateUserRequest createUserRequest = RandomModelGenerator.generate(CreateUserRequest.class);
+
+        CreateUserResponse createUserResponse = AdminSteps.createUser(createUserRequest);
+
+        ModelAssertions.assertThatModels(createUserRequest, createUserResponse).match();
+
+        // статус 201 ещё не значит, что пользователь сохранён: проверяем фактическое состояние через GET
+        Optional<CreateUserResponse> savedUser = AdminSteps.findUser(createUserResponse.getId());
+        assertThat(savedUser)
+                .as("Созданный пользователь должен быть в списке пользователей")
+                .isPresent();
+        ModelAssertions.assertThatModels(createUserRequest, savedUser.get()).match();
     }
 
 
@@ -47,30 +49,21 @@ public class CreateUserTest extends BaseTest {
 
     @MethodSource("userInvalidData")
     @ParameterizedTest
-    public void adminCanCreateUserWithNotCorrectDataTest(String username, String password, String role, JsonField errorKey, ErrorMessage errorValue) {
+    public void adminCannotCreateUserWithNotCorrectDataTest(String username, String password, String role,
+                                                            JsonField errorKey, ErrorMessage errorValue) {
         CreateUserRequest createUserRequest = CreateUserRequest.builder()
                 .username(username)
                 .password(password)
                 .role(role)
                 .build();
-        new CrudRequester(RequestSpecs.adminSpec(),
-                Endpoint.ADMIN_USER,
-                ResponseSpecs.requestResponseBadRequest(errorKey, errorValue))
-                .post(createUserRequest);
+
+        AdminSteps.createUserExpectingError(createUserRequest,
+                ResponseSpecs.requestResponseBadRequest(errorKey, errorValue));
 
         // статус 400 ещё не значит, что пользователь не создан: проверяем фактическое состояние через GET
-  /*      softly.assertThat(getUsernames())
+        softly.assertThat(AdminSteps.getUsers())
+                .extracting(CreateUserResponse::getUsername)
                 .as("Пользователь с некорректными данными не должен быть создан")
                 .doesNotContain(username);
     }
-
-    private List<String> getUsernames() {
-        CreateUserResponse[] users = new AdminGetUsersRequester(RequestSpecs.adminSpec(), ResponseSpecs.requestResponseOK())
-                .get()
-                .extract().as(CreateUserResponse[].class);
-        return Arrays.stream(users)
-                .map(CreateUserResponse::getUsername)
-                .toList();
-    }
-*/
-}}
+}

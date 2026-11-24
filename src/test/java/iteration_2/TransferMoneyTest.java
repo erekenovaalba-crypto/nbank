@@ -1,40 +1,22 @@
-/*
 package iteration_2;
 
-import models.ErrorMessage;
-import models.SuccessMessage;
-import models.TransactionType;
+import comparison.ModelAssertions;
 import generators.AmountGenerator;
 import generators.RandomData;
-import io.restassured.specification.RequestSpecification;
 import iteration_1.BaseTest;
-import models.CreateAccountResponse;
-import models.CreateUserRequest;
-import models.CustomerProfile;
-import models.DepositRequest;
-import models.TransactionData;
-import models.TransferRequest;
-import models.TransferResponse;
-import models.UserRole;
+import models.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import requests.AccountTransactionsRequester;
-import requests.CreateAccountRequester;
-import requests.DepositRequester;
-import requests.GetProfileRequester;
-import requests.TransferRequester;
-import spec.RequestSpecs;
+import requests.steps.AdminSteps;
+import requests.steps.UserSteps;
 import spec.ResponseSpecs;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
-import java.util.List;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 public class TransferMoneyTest extends BaseTest {
@@ -42,112 +24,35 @@ public class TransferMoneyTest extends BaseTest {
     // на счёте больше лимита перевода, чтобы срабатывала проверка суммы, а не нехватка средств
     private static final BigDecimal BALANCE_ABOVE_TRANSFER_LIMIT =
             AmountGenerator.MAX_TRANSFER.add(AmountGenerator.MAX_DEPOSIT);
-    // сервер хранит баланс как double
+    // сервер хранит баланс как double (например 24349.699999999983), поэтому сравниваем с допуском
     private static final BigDecimal BALANCE_DELTA = new BigDecimal("0.005");
 
-    private RequestSpecification spec;
+    private CreateUserRequest user;
     private long senderId;
     private long receiverId;
 
     // у каждого теста свой новый пользователь с двумя пустыми счетами
     @BeforeEach
     public void setupUserWithTwoAccounts() {
-        spec = createUser();
-        senderId = createAccount(spec);
-        receiverId = createAccount(spec);
+        user = AdminSteps.createUser();
+        senderId = UserSteps.createAccount(user).getId();
+        receiverId = UserSteps.createAccount(user).getId();
     }
 
-    // создаёт пользователя через админа и возвращает спецификацию для запросов от его имени
-    private RequestSpecification createUser() {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUsername())
-                .password(RandomData.getPassword())
-                .role(UserRole.USER.toString())
+    private TransferRequest transferRequest(long from, long to, BigDecimal amount) {
+        return TransferRequest.builder()
+                .senderAccountId(from)
+                .receiverAccountId(to)
+                .amount(amount)
                 .build();
-
-        new AdminCreateUserRequester(
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
-        return RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword());
     }
 
-    // создаёт счёт пользователю и возвращает его id
-    private long createAccount(RequestSpecification userSpec) {
-        return new CreateAccountRequester(userSpec, ResponseSpecs.entityWasCreated())
-                .post()
-                .extract().as(CreateAccountResponse.class)
-                .getId();
-    }
-
-    // максимум за один депозит 5000, поэтому большие суммы вносим частями
-    private void fundAccount(long accountId, BigDecimal amount) {
-        BigDecimal rest = amount;
-        while (rest.signum() > 0) {
-            BigDecimal chunk = rest.min(AmountGenerator.MAX_DEPOSIT);
-            new DepositRequester(spec, ResponseSpecs.requestResponseOK())
-                    .post(DepositRequest.builder().id(accountId).balance(chunk).build());
-            rest = rest.subtract(chunk);
-        }
-    }
-
-    private List<TransactionData> getTransactions(long accountId) {
-        return getTransactions(spec, accountId);
-    }
-
-    private List<TransactionData> getTransactions(RequestSpecification userSpec, long accountId) {
-        TransactionData[] transactions = new AccountTransactionsRequester(userSpec, ResponseSpecs.requestResponseOK())
-                .get(accountId)
-                .extract().as(TransactionData[].class);
-        return Arrays.asList(transactions);
-    }
-
-    private BigDecimal getBalance(long accountId) {
-        return getBalance(spec, accountId);
-    }
-
-    // баланс берём из профиля: GET /api/v1/customer/profile возвращает счета пользователя
-    private BigDecimal getBalance(RequestSpecification userSpec, long accountId) {
-        return new GetProfileRequester(userSpec, ResponseSpecs.requestResponseOK())
-                .get()
-                .extract().as(CustomerProfile.class)
-                .getAccounts()
-                .stream()
-                .filter(account -> account.getId() == accountId)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Счёт " + accountId + " не найден у пользователя"))
-                .getBalance();
-    }
-
-    private TransactionData singleTransaction(List<TransactionData> transactions, TransactionType type) {
-        List<TransactionData> filtered = transactions.stream()
-                .filter(t -> type.name().equals(t.getType()))
-                .toList();
-        assertThat(filtered)
-                .as("Ожидалась ровно одна транзакция " + type.name() + ", есть: " + transactions)
-                .hasSize(1);
-        return filtered.getFirst();
-    }
-
-    private void transferExpectingError(long from, long to, BigDecimal amount, ErrorMessage errorMessage) {
-        //POST
-        new TransferRequester(
-                spec,
-                ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage))
-                .post(TransferRequest.builder()
-                        .senderAccountId(from)
-                        .receiverAccountId(to)
-                        .amount(amount)
-                        .build());
-    }
-    //GET
     private void assertNothingWasTransferred() {
-        softly.assertThat(getTransactions(senderId))
+        softly.assertThat(UserSteps.getTransactions(user, senderId))
                 .extracting(TransactionData::getType)
                 .as("У отправителя не должно быть " + TransactionType.TRANSFER_OUT)
                 .doesNotContain(TransactionType.TRANSFER_OUT.name());
-        softly.assertThat(getTransactions(receiverId))
+        softly.assertThat(UserSteps.getTransactions(user, receiverId))
                 .as("У получателя не должно быть транзакций")
                 .isEmpty();
     }
@@ -163,45 +68,72 @@ public class TransferMoneyTest extends BaseTest {
     @MethodSource("validTransferAmounts")
     @ParameterizedTest
     public void userCanTransferMoneyBetweenOwnAccounts(BigDecimal amount) {
-        fundAccount(senderId, amount);
-        BigDecimal senderBefore = getBalance(senderId);
-        BigDecimal receiverBefore = getBalance(receiverId);
-        //POST
+        UserSteps.fundAccount(user, senderId, amount);
+        BigDecimal senderBefore = UserSteps.getBalance(user, senderId);
+        BigDecimal receiverBefore = UserSteps.getBalance(user, receiverId);
+        TransferRequest request = transferRequest(senderId, receiverId, amount);
 
-        TransferResponse response = new TransferRequester(
-                spec,
-                ResponseSpecs.requestResponseOK())
-                .post(TransferRequest.builder()
-                        .senderAccountId(senderId)
-                        .receiverAccountId(receiverId)
-                        .amount(amount)
-                        .build())
-                .extract().as(TransferResponse.class);
+        TransferResponse response = UserSteps.transfer(user, request);
 
-        softly.assertThat(response.getSenderAccountId()).isEqualTo(senderId);
-        softly.assertThat(response.getReceiverAccountId()).isEqualTo(receiverId);
-        softly.assertThat(response.getAmount()).isEqualByComparingTo(amount);
+        ModelAssertions.assertThatModels(request, response).match();
         softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.TRANSFER_SUCCESSFUL.getMessage());
-        //GET проверка баланса
-        softly.assertThat(getBalance(senderId))
+
+        // фактическое состояние через GET: балансы обоих счетов и транзакции
+        softly.assertThat(UserSteps.getBalance(user, senderId))
                 .as("Баланс отправителя")
                 .isCloseTo(senderBefore.subtract(amount), within(BALANCE_DELTA));
-        softly.assertThat(getBalance(receiverId))
+        softly.assertThat(UserSteps.getBalance(user, receiverId))
                 .as("Баланс получателя")
                 .isCloseTo(receiverBefore.add(amount), within(BALANCE_DELTA));
-        //GET проверка транзакций у получателя и отправителя
 
-        TransactionData out = singleTransaction(getTransactions(senderId), TransactionType.TRANSFER_OUT);
+        TransactionData out = UserSteps.singleTransaction(
+                UserSteps.getTransactions(user, senderId), TransactionType.TRANSFER_OUT);
         softly.assertThat(out.getId()).isNotNull().isPositive();
         softly.assertThat(out.getAmount()).isEqualByComparingTo(amount);
         softly.assertThat(out.getRelatedAccountId()).isEqualTo((int) receiverId);
         softly.assertThat(out.getTimestamp()).isNotNull();
 
-        TransactionData in = singleTransaction(getTransactions(receiverId), TransactionType.TRANSFER_IN);
+        TransactionData in = UserSteps.singleTransaction(
+                UserSteps.getTransactions(user, receiverId), TransactionType.TRANSFER_IN);
         softly.assertThat(in.getId()).isNotNull().isPositive();
         softly.assertThat(in.getAmount()).isEqualByComparingTo(amount);
         softly.assertThat(in.getRelatedAccountId()).isEqualTo((int) senderId);
         softly.assertThat(in.getTimestamp()).isNotNull();
+    }
+
+    // Позитивный кейс: перевод на счёт другого пользователя
+    @Test
+    public void userCanTransferMoneyToAnotherUsersAccount() {
+        CreateUserRequest otherUser = AdminSteps.createUser();
+        long otherAccountId = UserSteps.createAccount(otherUser).getId();
+        BigDecimal amount = AmountGenerator.validTransferAmount();
+        UserSteps.fundAccount(user, senderId, amount);
+        BigDecimal senderBefore = UserSteps.getBalance(user, senderId);
+        BigDecimal otherBefore = UserSteps.getBalance(otherUser, otherAccountId);
+        TransferRequest request = transferRequest(senderId, otherAccountId, amount);
+
+        TransferResponse response = UserSteps.transfer(user, request);
+
+        ModelAssertions.assertThatModels(request, response).match();
+        softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.TRANSFER_SUCCESSFUL.getMessage());
+
+        softly.assertThat(UserSteps.getBalance(user, senderId))
+                .as("Баланс отправителя")
+                .isCloseTo(senderBefore.subtract(amount), within(BALANCE_DELTA));
+        softly.assertThat(UserSteps.getBalance(otherUser, otherAccountId))
+                .as("Баланс получателя (другого пользователя)")
+                .isCloseTo(otherBefore.add(amount), within(BALANCE_DELTA));
+
+        TransactionData out = UserSteps.singleTransaction(
+                UserSteps.getTransactions(user, senderId), TransactionType.TRANSFER_OUT);
+        softly.assertThat(out.getAmount()).isEqualByComparingTo(amount);
+        softly.assertThat(out.getRelatedAccountId()).isEqualTo((int) otherAccountId);
+
+        // получатель видит входящую транзакцию в своей истории
+        TransactionData in = UserSteps.singleTransaction(
+                UserSteps.getTransactions(otherUser, otherAccountId), TransactionType.TRANSFER_IN);
+        softly.assertThat(in.getAmount()).isEqualByComparingTo(amount);
+        softly.assertThat(in.getRelatedAccountId()).isEqualTo((int) senderId);
     }
 
     // Негативный кейс: граничные значения (лимит + 0.01 и ноль) и случайные суммы вне диапазона
@@ -219,19 +151,19 @@ public class TransferMoneyTest extends BaseTest {
     @MethodSource("invalidTransferAmounts")
     @ParameterizedTest
     public void userCannotTransferInvalidAmount(BigDecimal amount, ErrorMessage errorMessage) {
-        fundAccount(senderId, BALANCE_ABOVE_TRANSFER_LIMIT);
+        UserSteps.fundAccount(user, senderId, BALANCE_ABOVE_TRANSFER_LIMIT);
 
-        transferExpectingError(senderId, receiverId, amount, errorMessage);
+        UserSteps.transferExpectingError(user, transferRequest(senderId, receiverId, amount),
+                ResponseSpecs.requestResponseBadRequestWithMessage(errorMessage));
 
+        // статус 400 ещё не значит, что деньги не ушли: проверяем фактическое состояние через GET
         assertNothingWasTransferred();
-        //GET
-        softly.assertThat(getBalance(senderId))
+        softly.assertThat(UserSteps.getBalance(user, senderId))
                 .as("Баланс отправителя не должен измениться")
                 .isCloseTo(BALANCE_ABOVE_TRANSFER_LIMIT, within(BALANCE_DELTA));
-        softly.assertThat(getBalance(receiverId))
+        softly.assertThat(UserSteps.getBalance(user, receiverId))
                 .as("Баланс получателя не должен измениться")
                 .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
-
     }
 
     // Негативный кейс: перевод больше, чем есть на счёте
@@ -243,14 +175,18 @@ public class TransferMoneyTest extends BaseTest {
                 AmountGenerator.MIN_AMOUNT, AmountGenerator.MAX_TRANSFER.subtract(AmountGenerator.MIN_AMOUNT));
         BigDecimal amount = AmountGenerator.randomAmount(
                 balance.add(AmountGenerator.MIN_AMOUNT), AmountGenerator.MAX_TRANSFER);
-        fundAccount(senderId, balance);
+        UserSteps.fundAccount(user, senderId, balance);
 
-        transferExpectingError(senderId, receiverId, amount, ErrorMessage.INVALID_TRANSFER);
+        UserSteps.transferExpectingError(user, transferRequest(senderId, receiverId, amount),
+                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_TRANSFER));
 
         assertNothingWasTransferred();
-        softly.assertThat(getBalance(senderId))
+        softly.assertThat(UserSteps.getBalance(user, senderId))
                 .as("Баланс отправителя не должен измениться")
                 .isCloseTo(balance, within(BALANCE_DELTA));
+        softly.assertThat(UserSteps.getBalance(user, receiverId))
+                .as("Баланс получателя не должен измениться")
+                .isCloseTo(BigDecimal.ZERO, within(BALANCE_DELTA));
     }
 
     // Негативный кейс: перевод на несуществующий счёт
@@ -259,14 +195,15 @@ public class TransferMoneyTest extends BaseTest {
         BigDecimal balance = AmountGenerator.randomAmount(AmountGenerator.MIN_AMOUNT, AmountGenerator.MAX_TRANSFER);
         // сумма допустимая и не больше баланса, ошибка должна быть только из-за счёта получателя
         BigDecimal amount = AmountGenerator.randomAmount(AmountGenerator.MIN_AMOUNT, balance);
-        fundAccount(senderId, balance);
+        UserSteps.fundAccount(user, senderId, balance);
 
-        transferExpectingError(senderId, RandomData.getNonExistentAccountId(), amount, ErrorMessage.INVALID_TRANSFER);
+        UserSteps.transferExpectingError(user,
+                transferRequest(senderId, RandomData.getNonExistentAccountId(), amount),
+                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_TRANSFER));
 
         assertNothingWasTransferred();
-        //GET
-        softly.assertThat(getBalance(senderId))
+        softly.assertThat(UserSteps.getBalance(user, senderId))
                 .as("Баланс отправителя не должен измениться")
                 .isCloseTo(balance, within(BALANCE_DELTA));
     }
-}*/
+}

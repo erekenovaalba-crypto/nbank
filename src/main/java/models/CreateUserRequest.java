@@ -1,3 +1,4 @@
+
 package models;
 
 import generators.GeneratingRule;
@@ -6,10 +7,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
-@NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Data
+@NoArgsConstructor
 public class CreateUserRequest extends BaseModel {
     @GeneratingRule(regex = "[A-Za-z0-9]{3,15}")
     private String username;

@@ -1,100 +1,70 @@
-/*
 package iteration_2;
 
-import models.ErrorMessage;
-import models.SuccessMessage;
+import comparison.ModelAssertions;
 import generators.NameGenerator;
-import generators.RandomData;
-import io.restassured.specification.RequestSpecification;
+import generators.RandomModelGenerator;
 import iteration_1.BaseTest;
-import models.CreateUserRequest;
-import models.CustomerProfile;
-import models.UpdateProfileRequest;
-import models.UpdateProfileResponse;
-import models.UserRole;
+import models.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import requests.GetProfileRequester;
-import requests.UpdateProfileRequester;
-import spec.RequestSpecs;
+import requests.steps.AdminSteps;
+import requests.steps.UserSteps;
 import spec.ResponseSpecs;
 
 import java.util.stream.Stream;
 
 public class UpdateNameTest extends BaseTest {
 
-    private RequestSpecification spec;
+    private CreateUserRequest user;
 
     // у каждого теста свой новый пользователь
     @BeforeEach
     public void setupUser() {
-        CreateUserRequest userRequest = CreateUserRequest.builder()
-                .username(RandomData.getUsername())
-                .password(RandomData.getPassword())
-                .role(UserRole.USER.toString())
-                .build();
-
-                RequestSpecs.adminSpec(),
-                ResponseSpecs.entityWasCreated())
-                .post(userRequest);
-
-        spec = RequestSpecs.authAsUser(userRequest.getUsername(), userRequest.getPassword());
-    }
-
-    private String getProfileName() {
-        return new GetProfileRequester(spec, ResponseSpecs.requestResponseOK())
-                .get()
-                .extract().as(CustomerProfile.class)
-                .getName();
+        user = AdminSteps.createUser();
     }
 
     // Позитивный кейс: два слова из букв, с заглавными и строчными буквами
     public static Stream<Arguments> validNames() {
+        UpdateProfileRequest capitalized = RandomModelGenerator.generate(UpdateProfileRequest.class);
+        UpdateProfileRequest lowerCase = new UpdateProfileRequest(capitalized.getName().toLowerCase());
         return Stream.of(
-                Arguments.of(NameGenerator.validName()),
-                Arguments.of(NameGenerator.validNameLowerCase()));
+                Arguments.of(capitalized),
+                Arguments.of(lowerCase));
     }
 
     @MethodSource("validNames")
     @ParameterizedTest
-    public void userCanUpdateNameWithValidData(String name) {
-        UpdateProfileResponse response = new UpdateProfileRequester(
-                spec,
-                ResponseSpecs.requestResponseOK())
-                .put(UpdateProfileRequest.builder().name(name).build())
-                .extract().as(UpdateProfileResponse.class);
+    public void userCanUpdateNameWithValidData(UpdateProfileRequest request) {
+        UpdateProfileResponse response = UserSteps.updateName(user, request);
 
         softly.assertThat(response.getMessage()).isEqualTo(SuccessMessage.PROFILE_UPDATED.getMessage());
-        softly.assertThat(response.getCustomer().getName()).isEqualTo(name);
+        softly.assertThat(response.getCustomer().getName()).isEqualTo(request.getName());
 
-        // GET имя действительно сохранилось в профиле
-        softly.assertThat(getProfileName()).isEqualTo(name);
+        // имя действительно сохранилось в профиле: проверяем фактическое состояние через GET
+        ModelAssertions.assertThatModels(request, UserSteps.getProfile(user)).match();
     }
 
     // Негативный кейс: имя должно состоять из двух слов, только из букв
     public static Stream<Arguments> invalidNames() {
         return Stream.of(
-                Arguments.of(NameGenerator.singleWordName()),
-                Arguments.of(NameGenerator.nameWithSymbol()),
-                Arguments.of(NameGenerator.nameWithDigit()),
-                Arguments.of(NameGenerator.nameWithExtraSpaces()));
+                Arguments.of(new UpdateProfileRequest(NameGenerator.singleWordName())),
+                Arguments.of(new UpdateProfileRequest(NameGenerator.nameWithSymbol())),
+                Arguments.of(new UpdateProfileRequest(NameGenerator.nameWithDigit())),
+                Arguments.of(new UpdateProfileRequest(NameGenerator.nameWithExtraSpaces())));
     }
 
     @MethodSource("invalidNames")
     @ParameterizedTest
-    public void userCannotUpdateNameWithInvalidData(String name) {
-        String nameBefore = getProfileName();
+    public void userCannotUpdateNameWithInvalidData(UpdateProfileRequest request) {
+        String nameBefore = UserSteps.getProfile(user).getName();
 
-        new UpdateProfileRequester(
-                spec,
-                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME))
-                .put(UpdateProfileRequest.builder().name(name).build());
-        //GET
-        softly.assertThat(getProfileName())
+        UserSteps.updateNameExpectingError(user, request,
+                ResponseSpecs.requestResponseBadRequestWithMessage(ErrorMessage.INVALID_NAME));
+
+        softly.assertThat(UserSteps.getProfile(user).getName())
                 .as("Имя в профиле не должно измениться")
                 .isEqualTo(nameBefore);
     }
 }
-*/

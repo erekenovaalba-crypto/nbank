@@ -1,48 +1,36 @@
 package iteration_1;
 
-import generators.RandomData;
-import generators.RandomModelGenerator;
-import models.CreateUserRequest;
-import models.CreateUserResponse;
-import models.LoginUserRequest;
-import models.UserRole;
-import org.hamcrest.Matchers;
+import io.restassured.specification.RequestSpecification;
+import models.*;
 import org.junit.jupiter.api.Test;
-import requests.skelethon.Endpoint;
-import requests.skelethon.requesters.CrudRequester;
-import requests.skelethon.requesters.ValidatedCrudRequesters;
 import requests.steps.AdminSteps;
-import spec.RequestSpecs;
-import spec.ResponseSpecs;
+import requests.steps.UserSteps;
 
-import static io.restassured.RestAssured.given;
-
-public class LoginUserTest {
+public class LoginUserTest extends BaseTest {
 
     //войти админом
     @Test
     public void adminCanGenerateAuthTokenTest() {
-        LoginUserRequest userRequest = LoginUserRequest.builder()
-                .username("admin")
-                .password("admin")
-                .build();
-        new ValidatedCrudRequesters<CreateUserResponse>(RequestSpecs.unauthenticSpec(),
-                Endpoint.LOGIN,
-                ResponseSpecs.requestResponseOK())
-                .post(userRequest);
+        String token = UserSteps.login(AuthConstants.ADMIN_USERNAME, AuthConstants.ADMIN_PASSWORD);
+
+        softly.assertThat(token).as("Токен админа").isNotBlank();
+
+        // токен должен реально давать доступ: админский запрос с ним проходит (статус 200 проверяет спецификация)
+        AdminSteps.getUsers(UserSteps.specWithToken(token));
     }
 
-
-  @Test
+    @Test
     public void userCanGenerateAuthTokenTest() {
-      CreateUserRequest userRequest = AdminSteps.createUser();
-        //логин
-        new CrudRequester(RequestSpecs.unauthenticSpec(),
-                Endpoint.LOGIN,
-                ResponseSpecs.requestResponseOK())
-                .post(LoginUserRequest.builder().username(userRequest.getUsername()).password(userRequest.getPassword()).build())
-                .header("Authorization",Matchers.notNullValue());
+        CreateUserRequest userRequest = AdminSteps.createUser();
 
+        String token = UserSteps.login(userRequest);
+
+        softly.assertThat(token).as("Токен пользователя").isNotBlank();
+
+        // токен должен давать доступ к данным именно этого пользователя: проверяем через GET профиля
+        RequestSpecification tokenSpec = UserSteps.specWithToken(token);
+        softly.assertThat(UserSteps.getProfile(tokenSpec).getUsername())
+                .as("Профиль, полученный по токену, должен принадлежать залогиненному пользователю")
+                .isEqualTo(userRequest.getUsername());
     }
-
 }

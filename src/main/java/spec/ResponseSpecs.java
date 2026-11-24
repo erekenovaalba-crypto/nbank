@@ -1,9 +1,9 @@
 package spec;
 
-import models.ErrorMessage;
-import models.JsonField;
 import io.restassured.builder.ResponseSpecBuilder;
 import io.restassured.specification.ResponseSpecification;
+import models.ErrorMessage;
+import models.JsonField;
 import org.apache.http.HttpStatus;
 import org.hamcrest.Matchers;
 
@@ -27,6 +27,12 @@ public class ResponseSpecs {
         return  defaultResponseBuilder()
                 .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
                 .expectBody(errorKey.getName(), Matchers.hasItem(errorMessage.getMessage()))
+                .build();
+    }
+    // когда текст ошибки неизвестен или не важен, проверяем только статус-код
+    public static ResponseSpecification requestResponseBadRequest(){
+        return  defaultResponseBuilder()
+                .expectStatusCode(HttpStatus.SC_BAD_REQUEST)
                 .build();
     }
     // ошибка приходит обычным текстом, а не JSON, поэтому сравниваем всё тело
